@@ -1,0 +1,11 @@
+name: osintbrflow-lab
+services:
+  brasil:
+    build:
+      context: .
+      dockerfile: Dockerfile.brasil
+    ports: ['127.0.0.1:8000:8000']
+    volumes: ['brasil_data:/data']
+    restart: unless-stopped
+volumes:
+  brasil_data:

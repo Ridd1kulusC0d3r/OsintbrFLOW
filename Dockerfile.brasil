@@ -1,0 +1,19 @@
+FROM node:24-alpine AS frontend
+WORKDIR /src
+COPY package.json package-lock.json ./
+COPY flowsint-app/package.json ./flowsint-app/package.json
+RUN npm ci --ignore-scripts --legacy-peer-deps
+COPY flowsint-app ./flowsint-app
+RUN npm run build --workspace flowsint-app
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements-brasil.txt ./
+RUN pip install --no-cache-dir -r requirements-brasil.txt && useradd -m -u 1001 analyst && mkdir /data && chown analyst /data
+COPY flowsint-types/src ./flowsint-types/src
+COPY flowsint-core/src/osintbr ./flowsint-core/src/osintbr
+COPY --from=frontend /src/flowsint-app/dist ./flowsint-app/dist
+ENV PYTHONPATH=/app/flowsint-types/src:/app/flowsint-core/src OSINTBR_DB=/data/brasil.sqlite3
+USER analyst
+EXPOSE 8000
+CMD ["python","-m","uvicorn","osintbr.lab:app","--host","0.0.0.0","--port","8000"]

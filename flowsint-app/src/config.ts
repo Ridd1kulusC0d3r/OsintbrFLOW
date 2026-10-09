@@ -1,0 +1,4 @@
+export const CONFIG = {
+  ENRICHER_TEMPLATES_FEATURE_FLAG: true,
+  SCANS_LIST_FEATURE_FLAG: false
+}

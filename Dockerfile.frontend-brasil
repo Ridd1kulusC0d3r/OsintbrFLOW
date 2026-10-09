@@ -1,0 +1,14 @@
+FROM node:24-alpine AS builder
+WORKDIR /src
+COPY package.json package-lock.json ./
+COPY flowsint-app/package.json ./flowsint-app/package.json
+RUN npm ci --ignore-scripts --legacy-peer-deps
+COPY flowsint-app ./flowsint-app
+RUN npm run build --workspace flowsint-app
+FROM nginx:1.29-alpine
+RUN addgroup -g 1001 -S flowsint && adduser -u 1001 -S flowsint -G flowsint && chown -R flowsint:flowsint /usr/share/nginx/html
+COPY flowsint-app/nginx.conf /etc/nginx/nginx.conf
+COPY --from=builder --chown=flowsint:flowsint /src/flowsint-app/dist /usr/share/nginx/html
+USER flowsint
+EXPOSE 8080
+CMD ["nginx","-g","daemon off;"]
