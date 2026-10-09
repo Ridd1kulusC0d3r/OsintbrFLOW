@@ -90,6 +90,9 @@ def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
     assert 'proxyPort({PORT}, {{cache: false}})' in combined
     assert '["git", "merge", "--ff-only", "origin/main"]' in combined
     assert 'cache_in_notebook=False' in combined
+    # npm ci rewrites yarn.lock; a second "Run all" must not abort on it.
+    assert 'INSTALL_ARTIFACTS = ["yarn.lock"]' in combined
+    assert combined.count('["git", "checkout", "--", *INSTALL_ARTIFACTS]') == 2
     assert '0.0.0.0' not in combined
     assert 'files.download' not in combined
 
