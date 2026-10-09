@@ -67,7 +67,6 @@ def test_proxy_requires_token_on_reads_and_writes(monkeypatch):
     assert export.status_code == 200
     assert export.headers["cache-control"] == "no-store"
     assert client.get("/api/brasil/cases", headers={"Origin": ORIGIN + ".attacker.test"}).status_code == 403
-    assert client.get("/api/brasil/cases", headers={"Host": "example-colab.googleusercontent.com.attacker.test"}).status_code == 403
     # A proxy may keep localhost as its upstream Host header.
     assert client.get("/api/brasil/cases", headers={"Host": "127.0.0.1:34567"}).status_code == 200
 
@@ -87,6 +86,31 @@ def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
     combined = "\n".join(code)
     assert 'secrets.token_urlsafe(32)' in combined
     assert 'serve_kernel_port_as_iframe' in combined
+    assert 'path=PANEL_URL' in combined
+    assert 'proxyPort({PORT}, {{cache: false}})' in combined
+    assert '["git", "merge", "--ff-only", "origin/main"]' in combined
     assert 'cache_in_notebook=False' in combined
     assert '0.0.0.0' not in combined
     assert 'files.download' not in combined
+
+
+@pytest.mark.parametrize("upstream_host", [
+    "127.0.0.1:34567", "localhost:34567", "[::1]:34567",
+    "internal-colab-proxy:34567", "alternate-session.colab.dev", "attacker.test",
+])
+def test_proxy_host_is_not_an_authentication_credential(monkeypatch, tmp_path, upstream_host):
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "brasil.html").write_text("<html>OSINT Brasil Flow</html>")
+    monkeypatch.setenv("OSINTBR_FRONTEND", str(frontend))
+    client = proxy_client(monkeypatch)
+    client.headers["Host"] = upstream_host
+    assert client.get("/brasil.html").status_code == 200
+    # Public UI assets contain no cases or credentials; all case data needs a key.
+    assert client.get("/api/brasil/cases").status_code == 401
+    assert client.post("/api/brasil/cases", json={}).status_code == 401
+    assert client.get("/api/brasil/cases", headers={"Authorization": "Bearer wrong"}).status_code == 401
+    client.headers["Authorization"] = "Bearer " + TOKEN
+    assert client.get("/api/brasil/cases").status_code == 200
+    assert client.post("/api/brasil/cases", headers={"Origin": ORIGIN}, json={"title": "Proxy test", "purpose": "Verificar Host reescrito"}).status_code == 201
+    assert client.get("/api/brasil/cases", headers={"Origin": "https://attacker.test"}).status_code == 403

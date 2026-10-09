@@ -29,7 +29,6 @@ def create_app():
             or len(token) < 32 or not token.isascii()
         ):
             raise ValueError("Proxy exige origem HTTPS exata e token ASCII de pelo menos 32 caracteres.")
-        hosts.add(proxy.hostname)
         origins.add(proxy_origin)
 
     app = FastAPI(title="OSINT Brasil Flow · laboratório", docs_url=None, redoc_url=None)
@@ -40,7 +39,11 @@ def create_app():
             host = urlsplit("//" + request.headers.get("host", "")).hostname
         except ValueError:
             host = None
-        if host not in hosts:
+        # Colab can rewrite the upstream Host header. In proxy mode, Host
+        # is transport metadata, not an access credential: every API route
+        # still requires the session bearer token and an allowed Origin.
+        # Keep DNS-rebinding protection for the unauthenticated local mode.
+        if not token and host not in hosts:
             return JSONResponse({"detail": "Host não autorizado."}, status_code=403)
         origin = request.headers.get("origin")
         if origin and origin not in origins:

@@ -53,6 +53,8 @@ O atlas **não significa 1.171 integrações**. Fontes manuais estão rotuladas;
 
 O notebook instala tudo na máquina temporária do Colab, sem downloads para seu computador. Inclui o laboratório Brasil, com grafo, evidências e os três conectores; a pilha completa do Flowsint é a opção Docker abaixo. Não requer chave de API, Drive ou túnel externo. Os dados duram enquanto o ambiente existir: exporte os casos que quiser guardar. O proxy usa uma chave temporária por sessão; não compartilhe saídas de uma sessão ativa.
 
+**Se uma versão anterior mostrar “Host não autorizado”:** reabra o notebook pelo botão acima para carregar as células atualizadas e use **Executar tudo**. A preparação atualiza um checkout limpo sem apagar os casos da sessão. Uma cópia antiga já aberta no Colab não recebe as novas células automaticamente.
+
 ### Docker — laboratório local
 
 ```bash

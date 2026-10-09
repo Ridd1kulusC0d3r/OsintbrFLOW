@@ -64,3 +64,12 @@ Para repetir os testes adicionais:
 PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py -q
 npm run build:brasil --workspace flowsint-app
 ```
+
+
+### Correção do proxy Colab — Host não autorizado
+
+O primeiro teste do usuário no Colab retornou `403 Host não autorizado`, falha que a validação local anterior não cobria. A captura não inclui o valor do cabeçalho recebido; portanto, não é possível atribuir o erro a um hostname específico.
+
+A correção separa os dois modos: localhost mantém sua lista restrita de hosts; Colab exige a chave Bearer em todas as rotas `/api/` e valida a origem quando presente, sem usar o Host encaminhado pelo proxy como credencial. O HTML e os assets não contêm casos nem chaves. O notebook usa `proxyPort(..., {cache: false})` e passa uma URL absoluta ao iframe, preservando a mesma origem configurada no servidor.
+
+Foram acrescentadas seis variações de Host aos testes: hosts locais, IPv6, host interno, domínio alternativo e host arbitrário. Em todos, o painel está acessível, os dados sem chave são recusados, a chave correta permite a consulta e origens externas continuam bloqueadas. A confirmação em uma sessão real do Colab após esta correção ainda está pendente.
