@@ -34,7 +34,21 @@ class SourceError(Exception):
         super().__init__(message)
 
 
+PERSON_ID_MESSAGE = (
+    "Isto parece um CPF (11 dígitos). O OSINT Brasil Flow não consulta "
+    "pessoas físicas: use CNPJ, CEP ou código IBGE de município."
+)
+
+
+def looks_like_cpf(value):
+    """True for 11 digits with optional CPF punctuation. The value is never echoed."""
+    return bool(re.fullmatch(r"[0-9]{3}\.?[0-9]{3}\.?[0-9]{3}-?[0-9]{2}", str(value).strip()))
+
+
 def endpoint(kind, value):
+    # Refuse person identifiers before any normalization or network call.
+    if looks_like_cpf(value):
+        raise ValueError(PERSON_ID_MESSAGE)
     if kind == "cnpj":
         value = normalize_cnpj(value)
         return value, f"https://brasilapi.com.br/api/cnpj/v1/{value}"

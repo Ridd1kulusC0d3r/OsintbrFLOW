@@ -243,3 +243,38 @@ def test_api_isolation_execution_export_and_validation(tmp_path):
         )
         assert len(c.get("/api/brasil/sources").json()) > 1000
         assert c.post("/api/brasil/verify", json=[]).status_code == 422
+
+
+# Synthetic, publicly documented test CPF. Real CPFs never belong in fixtures.
+SYNTHETIC_CPF = ["52998224725", "529.982.247-25"]
+
+
+@pytest.mark.parametrize("seed", SYNTHETIC_CPF)
+@pytest.mark.parametrize(
+    "kind,steps",
+    [("cnpj", ["cnpj"]), ("cep", ["cep"]), ("municipio", ["municipio"])],
+)
+@pytest.mark.parametrize("mode", ["live", "demo"])
+def test_person_identifier_is_refused_before_any_request(tmp_path, seed, kind, steps, mode):
+    calls = []
+
+    def handler(request):
+        calls.append(request.url)
+        return httpx.Response(200, json={})
+
+    app = FastAPI()
+    store = Store(tmp_path / "cases.sqlite3")
+    provider = Provider(httpx.MockTransport(handler))
+    app.include_router(build_router(lambda: "u", store, provider), prefix="/api")
+    client = TestClient(app)
+    case = client.post("/api/cases", json={"title": "CPF", "purpose": "Recusar pessoa física"}).json()
+    response = client.post(
+        f"/api/cases/{case['id']}/runs",
+        json={"seed_kind": kind, "seed": seed, "steps": steps, "mode": mode},
+    )
+    assert response.status_code == 422
+    assert "CPF" in response.json()["detail"]
+    # The identifier is neither sent to a source, echoed back nor stored.
+    assert calls == []
+    assert seed.replace(".", "").replace("-", "")[:9] not in response.text
+    assert client.get(f"/api/cases/{case['id']}").json()["runs"] == []
