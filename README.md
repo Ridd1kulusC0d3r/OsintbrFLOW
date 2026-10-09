@@ -41,19 +41,57 @@ Um fork funcional do Flowsint, baseado no commit `4c05849bc6ca5055ad187d056ef26e
 
 O atlas **não significa 1.171 integrações**. Fontes manuais estão rotuladas; sua disponibilidade não foi testada individualmente. Uma resposta 404, timeout ou falha de fonte nunca gera uma conclusão de inexistência.
 
+## Entradas aceitas
+
+| Você informa | Exemplo público | Percursos |
+|---|---|---|
+| CNPJ (14 posições, numérico ou alfanumérico) | `00000000000191` | Empresa → território · Verificação cadastral |
+| CEP (8 dígitos) | `30130010` | CEP → município |
+| Código IBGE de município (7 dígitos) | `3106200` | Município oficial |
+| **CPF ou outro identificador de pessoa física** | — | **Recusado antes de qualquer chamada externa** |
+
+A recusa de CPF é uma decisão de projeto, não uma limitação temporária: o escopo é investigação empresarial e territorial, e a ferramenta não resolve identidade de pessoas. O valor recusado não é enviado a fontes, não aparece na mensagem de erro e não é gravado no caso.
+
 ## Começar em modo laboratório
+
+| Caminho | Para quem | Instala no computador? |
+|---|---|---|
+| [Google Colab](#google-colab--testar-sem-instalar-no-computador) | Primeiro contato, aula, demonstração | Não |
+| [Docker](#docker--laboratório-local) | Uso local contínuo | Docker |
+| [Python + Node](#python--node--caminho-executado-na-validação) | Desenvolvimento | Python 3.12+ e Node 24 |
+| [Fork completo](#rodar-o-fork-completo-do-flowsint) | Editor de fluxos e grafo Neo4j | Docker |
 
 ### Google Colab — testar sem instalar no computador
 
 [![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Ridd1kulusC0d3r/OsintbrFLOW/blob/main/notebooks/OsintbrFLOW_Colab.ipynb)
 
+| Célula | O que faz | Tempo típico |
+|---|---|---|
+| 1 · Preparar | Baixa o código, cria Python isolado, verifica o SHA-256 do Node 24 e compila o painel | 3–8 min na primeira vez |
+| 2 · Iniciar | Sobe o laboratório só dentro da máquina, com chave aleatória da sessão | segundos |
+| 3 · Painel | Mostra a interface incorporada | — |
+| 4 · Autoteste *(opcional)* | Roda a suíte de testes e sonda BrasilAPI, ViaCEP e IBGE **a partir da sua sessão** | ~1 min |
+
 1. Abra o notebook e clique em **Conectar** (sessão CPU; não precisa GPU).
-2. Selecione **Ambiente de execução → Executar tudo** e aguarde a instalação.
-3. Use o painel incorporado na última célula. Comece em **Explorar caso demonstrativo** ou crie um caso com fontes reais.
+2. Selecione **Ambiente de execução → Executar tudo** e aceite o aviso de notebook do GitHub.
+3. No painel, comece em **Explorar caso demonstrativo** ou crie um caso com **Fontes reais**.
 
-O notebook instala tudo na máquina temporária do Colab, sem downloads para seu computador. Inclui o laboratório Brasil, com grafo, evidências e os três conectores; a pilha completa do Flowsint é a opção Docker abaixo. Não requer chave de API, Drive ou túnel externo. Os dados duram enquanto o ambiente existir: exporte os casos que quiser guardar. O proxy usa uma chave temporária por sessão; não compartilhe saídas de uma sessão ativa.
+O notebook instala tudo na máquina temporária do Colab, sem downloads para seu computador. Não requer chave de API, Drive ou túnel externo. Os dados duram enquanto o ambiente existir: exporte os casos que quiser guardar. O proxy usa uma chave temporária por sessão; não compartilhe capturas ou saídas de uma sessão ativa.
 
-**Se uma versão anterior mostrar “Host não autorizado”:** reabra o notebook pelo botão acima para carregar as células atualizadas e use **Executar tudo**. A preparação atualiza um checkout limpo sem apagar os casos da sessão. Uma cópia antiga já aberta no Colab não recebe as novas células automaticamente.
+O autoteste grava `/content/osintbrflow-autoteste.json` na máquina Colab com versão, resultado dos testes e estado de cada fonte. Um ⚠️ indica fonte indisponível naquele momento, nunca inexistência do registro.
+
+#### Problemas comuns no Colab
+
+| Sintoma | O que fazer |
+|---|---|
+| “Há alterações locais no código” ao usar **Executar tudo** de novo | Corrigido: o `yarn.lock` reescrito pelo `npm ci` agora é restaurado. Reabra o notebook pelo botão acima. |
+| “Host não autorizado” | Células antigas. Reabra pelo botão acima e use **Executar tudo**. |
+| Painel em branco ou sumiu | Execute só a célula 3. Se a máquina foi desconectada, **Executar tudo**. |
+| Fonte com ⚠️ ou coleta “indisponível” | Instabilidade ou limite da fonte pública. Tente depois; o histórico preserva a falha. |
+| “Isto parece um CPF” | Esperado. Use CNPJ, CEP ou código IBGE. |
+| “Selecione um ambiente Colab com Python 3.12 ou superior” | **Ambiente de execução → Alterar o tipo** e escolha a imagem mais recente. |
+
+Uma cópia do notebook já aberta no Colab não recebe células novas automaticamente; reabra pelo botão.
 
 ### Docker — laboratório local
 
@@ -131,7 +169,7 @@ O painel Brasil tem seu próprio histórico de evidências. Os sketches nativos 
 ```bash
 pip install pytest pytest-asyncio
 # Linux/macOS — camada portátil:
-PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py -q
+PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py -q
 npm run typecheck:brasil --workspace flowsint-app
 npm run build --workspace flowsint-app
 python scripts/verify-bundle.py seu-pacote.json

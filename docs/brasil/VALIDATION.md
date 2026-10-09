@@ -73,3 +73,26 @@ O primeiro teste do usuário no Colab retornou `403 Host não autorizado`, falha
 A correção separa os dois modos: localhost mantém sua lista restrita de hosts; Colab exige a chave Bearer em todas as rotas `/api/` e valida a origem quando presente, sem usar o Host encaminhado pelo proxy como credencial. O HTML e os assets não contêm casos nem chaves. O notebook usa `proxyPort(..., {cache: false})` e passa uma URL absoluta ao iframe, preservando a mesma origem configurada no servidor.
 
 Foram acrescentadas seis variações de Host aos testes: hosts locais, IPv6, host interno, domínio alternativo e host arbitrário. Em todos, o painel está acessível, os dados sem chave são recusados, a chave correta permite a consulta e origens externas continuam bloqueadas. A confirmação em uma sessão real do Colab após esta correção ainda está pendente.
+
+
+## Revisão do Colab, autoteste e recusa de CPF — 2026-10-09
+
+**Ambiente:** sandbox Linux x86_64, Python 3.13, Node 22/npm 10 e npm 11.21. A rede de saída deste ambiente bloqueia `nodejs.org`, BrasilAPI, ViaCEP e IBGE; por isso o Node 24 foi substituído pelo Node local e as fontes reais não puderam ser alcançadas daqui. A sessão hospedada no Google Colab continua **não executada** por esta revisão.
+
+**Método:** as células reais do notebook foram executadas em sequência, sem edição, com um substituto local de `google.colab.output` (`proxyPort` e `serve_kernel_port_as_iframe`) e `/content` criado na máquina. Só o trecho de download do Node foi trocado.
+
+| Verificação | Resultado |
+|---|---|
+| Células 1–3 em ambiente limpo | Passaram; servidor em modo `colab-proxy`, painel servido com Host reescrito |
+| API sem chave / Origin externa / chave correta | 401 / 403 / 200 |
+| Caso demonstrativo pela API autenticada | Três evidências `ok` |
+| Coleta real sem acesso à rede | `failed` com `unavailable` registrado; nenhuma conclusão de inexistência |
+| **Segunda “Executar tudo” na mesma sessão (notebook anterior)** | **Falhava**: `npm ci` (npm 10 e 11) reescreve `yarn.lock`, e a célula 1 abortava com “Há alterações locais no código” |
+| Segunda “Executar tudo” após a correção | Passou duas vezes seguidas; checkout limpo ao final |
+| Entrada com formato de CPF nos três tipos e nos dois modos | 422 com mensagem explícita; zero requisições externas; valor não ecoado nem gravado |
+| Célula 4 (autoteste) | 59 testes passaram; fontes marcadas ⚠️ (bloqueio de rede deste ambiente); recusa de CPF ✅ |
+| Suíte `test_brasil.py` + `test_colab.py` | 59 passaram (47 anteriores + 12 de recusa de CPF) |
+
+**Pendente:** executar a célula 4 numa sessão real do Colab e anexar `/content/osintbrflow-autoteste.json` a esta seção. É a primeira evidência de ponta a ponta com proxy Google, Node 24 e as três fontes reais.
+
+**Observação:** `starlette.testclient` emite aviso de depreciação do `httpx`. Não afeta o laboratório, mas o limite `httpx<0.29` em `requirements-brasil.txt` deve ser revisto antes que o aviso vire erro.
