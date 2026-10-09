@@ -6,6 +6,7 @@
 **Uma evolução brasileira do [Flowsint](https://github.com/reconurge/flowsint): grafos, fluxos e investigação verificável.**
 
 [![Brasil CI](https://github.com/Ridd1kulusC0d3r/OsintbrFLOW/actions/workflows/brasil.yml/badge.svg)](https://github.com/Ridd1kulusC0d3r/OsintbrFLOW/actions/workflows/brasil.yml)
+[![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Ridd1kulusC0d3r/OsintbrFLOW/blob/main/notebooks/OsintbrFLOW_Colab.ipynb)
 ![Alpha](https://img.shields.io/badge/status-alpha_0.1.0-e4bc76)
 ![License](https://img.shields.io/badge/license-Apache--2.0-80e8b6)
 
@@ -42,7 +43,17 @@ O atlas **não significa 1.171 integrações**. Fontes manuais estão rotuladas;
 
 ## Começar em modo laboratório
 
-### Docker — caminho mais curto
+### Google Colab — testar sem instalar no computador
+
+[![Abrir no Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Ridd1kulusC0d3r/OsintbrFLOW/blob/main/notebooks/OsintbrFLOW_Colab.ipynb)
+
+1. Abra o notebook e clique em **Conectar** (sessão CPU; não precisa GPU).
+2. Selecione **Ambiente de execução → Executar tudo** e aguarde a instalação.
+3. Use o painel incorporado na última célula. Comece em **Explorar caso demonstrativo** ou crie um caso com fontes reais.
+
+O notebook instala tudo na máquina temporária do Colab, sem downloads para seu computador. Inclui o laboratório Brasil, com grafo, evidências e os três conectores; a pilha completa do Flowsint é a opção Docker abaixo. Não requer chave de API, Drive ou túnel externo. Os dados duram enquanto o ambiente existir: exporte os casos que quiser guardar. O proxy usa uma chave temporária por sessão; não compartilhe saídas de uma sessão ativa.
+
+### Docker — laboratório local
 
 ```bash
 git clone https://github.com/Ridd1kulusC0d3r/OsintbrFLOW.git

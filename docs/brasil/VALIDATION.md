@@ -44,3 +44,23 @@ npm run build --workspace flowsint-app
 ```
 
 Para testes nativos, instale também as dependências do core, acrescente `flowsint-enrichers/src` ao PYTHONPATH e execute `tests/brasil/test_native.py`. O teste não abre conexão Neo4j; ele verifica os objetos enviados ao serviço de grafo e a reimportação das entidades e arestas.
+
+
+## Opção Google Colab
+
+Notebook: `notebooks/OsintbrFLOW_Colab.ipynb`. Acrescenta instalação isolada, Node 24 com checksum, build dedicado e interface incorporada pelo proxy oficial do Colab. O laboratório exige um token por sessão quando o proxy está configurado; o modo local continua restrito a localhost.
+
+Validação desta alteração (2026-10-09):
+
+- 41 testes Python passaram (29 existentes + 12 de configuração, controle de acesso e notebook).
+- Instalação limpa com `npm ci --ignore-scripts --legacy-peer-deps`, typecheck Brasil e build dedicado passaram.
+- Chromium local: token enviado pela interface, caso demonstrativo com três entidades, remoção do token da URL e recarga autenticada; zero erros de página.
+- Células Python do notebook analisadas sintaticamente; sem resultados ou credenciais salvos.
+- A sessão hospedada no Google Colab **não foi executada neste ambiente**. Autenticação Google, disponibilidade da VM e integração com o proxy real ainda dependem do primeiro teste no Colab. A checagem local não equivale a essa validação.
+
+Para repetir os testes adicionais:
+
+```bash
+PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py -q
+npm run build:brasil --workspace flowsint-app
+```

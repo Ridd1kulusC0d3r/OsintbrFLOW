@@ -17,7 +17,8 @@
     "dev": "tsr generate && vite",
     "build": "tsr generate && vite build",
     "preview": "vite preview",
-    "typecheck:brasil": "tsc --project tsconfig.brasil.json"
+    "typecheck:brasil": "tsc --project tsconfig.brasil.json",
+    "build:brasil": "vite build --config vite.brasil.config.ts"
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.79",
