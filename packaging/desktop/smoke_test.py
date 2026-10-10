@@ -61,7 +61,8 @@ def main(argv=None):
     argv = argv if argv is not None else sys.argv[1:]
     if not argv:
         raise SystemExit(__doc__)
-    executable = shutil.which(argv[0]) or str(Path(argv[0]).resolve())
+    # which() returns relative paths unchanged; the app runs with another cwd.
+    executable = str(Path(shutil.which(argv[0]) or argv[0]).resolve())
     home = Path(tempfile.mkdtemp(prefix="osintbr-smoke-"))
     env = dict(os.environ, OSINTBR_HOME=str(home), PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
     for name in ("OSINTBR_DB", "OSINTBR_FRONTEND", "OSINTBR_PROXY_ORIGIN", "OSINTBR_COLAB_TOKEN"):
