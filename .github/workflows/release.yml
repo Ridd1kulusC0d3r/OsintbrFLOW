@@ -5,6 +5,14 @@ name: Aplicativo de desktop
 on:
   push:
     tags: ['v*']
+  # Em PRs que mexem no aplicativo, só constrói e testa (a Release exige tag).
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'flowsint-core/src/osintbr/**'
+      - 'flowsint-types/src/**'
+      - 'flowsint-app/src/**'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 permissions:
   contents: read

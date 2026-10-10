@@ -3,7 +3,8 @@
 Laboratório de investigação empresarial e territorial: CNPJ → CEP → município, com casos, grafo, evidências com SHA-256 e pacote verificável. Roda só no seu computador.
 
 ```bash
-pipx install osintbrflow
+# Enquanto o pacote não estiver no PyPI, instale o wheel baixado da página de Releases:
+pipx install ./osintbrflow-0.2.0-py3-none-any.whl
 osintbr
 ```
 
