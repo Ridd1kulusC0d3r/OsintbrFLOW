@@ -141,6 +141,19 @@ O Compose BR **compila este repositório**, em vez de baixar imagens upstream qu
 
 O modo completo ainda precisa de um teste de implantação de ponta a ponta com esses serviços reais. A compilação do frontend, a lógica dos enriquecedores e a importação de grafo foram testadas separadamente.
 
+### Hospedar para uma equipe
+
+> **⚠️ O laboratório Brasil (`compose.lab.yml`, `scripts/brasil.py`, porta 8000) não tem login e não deve ser exposto à internet, nem atrás de proxy ou túnel.** Para uso em equipe, hospede só o fork completo, que tem contas individuais.
+
+O guia [docs/brasil/DEPLOY.md](docs/brasil/DEPLOY.md) cobre uma VPS Linux com Docker: HTTPS automático com Caddy, portas internas fechadas, segredos gerados por `scripts/init-prod.py`, cadastro público fechado por padrão (`FLOWSINT_ALLOW_REGISTRATION=false`), backups com ensaio de restauração, lista de conferência de segurança e um roteiro mínimo de LGPD.
+
+```bash
+python3 scripts/init-prod.py --domain osint.suaorg.com.br --email ti@suaorg.com.br
+docker compose --env-file .env.prod -f compose.br.yml -f compose.prod.yml up -d --build
+```
+
+Os arquivos foram validados de forma estática (combinação Compose, configuração do Caddy, testes); **nenhuma implantação real foi executada ainda**. O guia lista o que não está feito: limitação de taxa no login, WAF, SSO/2FA, RBAC granular, armazenamento WORM.
+
 ### Percurso no editor de fluxos nativo
 
 Crie uma entidade **BrazilCompany**, forneça `cnpj`, conecte:

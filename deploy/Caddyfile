@@ -1,0 +1,47 @@
+# OsintbrFLOW — proxy HTTPS do Degrau 3 (usado por compose.prod.yml).
+# DOMAIN e ACME_EMAIL vêm de .env.prod (scripts/init-prod.py).
+#
+# Limitação de taxa (rate limiting) NÃO está aqui: o Caddy oficial não traz
+# esse módulo. Exige build próprio com o plugin caddy-ratelimit (xcaddy).
+# Ver docs/brasil/DEPLOY.md, seção "O que não está feito".
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Maior envio legítimo é a importação de arquivo TXT/JSON de um sketch.
+	request_body {
+		max_size 10MB
+	}
+
+	# "defer" aplica depois da resposta do nginx, substituindo os
+	# cabeçalhos dele em vez de duplicá-los.
+	header {
+		defer
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Content-Security-Policy "frame-ancestors 'none'"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+		-X-Powered-By
+	}
+
+	reverse_proxy app:8080 {
+		# O nginx do frontend aceita só Host localhost (defesa contra DNS
+		# rebinding). Aqui o Caddy já filtrou pelo domínio público acima.
+		header_up Host localhost
+		# Streams SSE (eventos e chat) sem buffer.
+		flush_interval -1
+	}
+
+	# Log de acesso em JSON na saída padrão; rotação pelo Docker
+	# (compose.prod.yml). Contém IP e URL: dado pessoal (ver LGPD no DEPLOY.md).
+	log {
+		output stdout
+		format json
+	}
+}

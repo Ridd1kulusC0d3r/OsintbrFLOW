@@ -96,3 +96,45 @@ Foram acrescentadas seis variações de Host aos testes: hosts locais, IPv6, hos
 **Pendente:** executar a célula 4 numa sessão real do Colab e anexar `/content/osintbrflow-autoteste.json` a esta seção. É a primeira evidência de ponta a ponta com proxy Google, Node 24 e as três fontes reais.
 
 **Observação:** `starlette.testclient` emite aviso de depreciação do `httpx`. Não afeta o laboratório, mas o limite `httpx<0.29` em `requirements-brasil.txt` deve ser revisto antes que o aviso vire erro.
+
+
+## Degrau 3 — hospedagem para equipe — 2026-10-09
+
+**Escopo:** `compose.prod.yml`, `deploy/Caddyfile`, `scripts/init-prod.py`, chave `FLOWSINT_ALLOW_REGISTRATION` na API, recusa de IPs públicos no laboratório e o guia `docs/brasil/DEPLOY.md`.
+
+**Ambiente:** sandbox Linux x86_64, Python 3.13, Docker Compose v5.5.1 **sem daemon Docker**, Caddy v2.11.4 (binário oficial distribuído no pacote PyPI `caddy-bin`). Sem DNS público, sem portas 80/443 alcançáveis, sem Let's Encrypt.
+
+> **Uma implantação real não foi executada.** Nenhuma imagem foi compilada, nenhum container subiu, nenhum certificado foi emitido, e os comandos de backup e restauração do DEPLOY.md não foram rodados. O primeiro deploy numa VPS é o primeiro teste de ponta a ponta.
+
+| Verificação | Resultado |
+|---|---|
+| `docker compose --env-file <gerado> -f compose.br.yml -f compose.prod.yml config` | Passou. Só `caddy` publica portas (80, 443, 443/udp); `postgres`, `redis`, `neo4j`, `api`, `app` sem portas; todos com `restart: unless-stopped`, limite de memória, rotação de log 10 MB × 5 e healthcheck; `ALLOWED_ORIGINS=https://<domínio>` e `FLOWSINT_ALLOW_REGISTRATION=false` na API |
+| Mesmo comando sem `DOMAIN` | Falha com “required variable DOMAIN is missing” (esperado) |
+| `caddy validate` e `caddy fmt` | “Valid configuration”; arquivo formatado |
+| Caddy rodando localmente em HTTP contra um servidor simulado no lugar do nginx | HSTS, `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy` presentes; `X-Frame-Options` do upstream substituído (não duplicado); `Server` removido; Host repassado como `localhost`; corpo de 11 MB → **413**, corpo pequeno → 200 |
+| Testes da API (`flowsint-api/tests`) | **32 passaram** (17 existentes + 15 novos da chave de cadastro) |
+| Testes `tests/brasil` | **86 passaram, 1 ignorado** (59 anteriores + 11 de recusa de IP público no laboratório + 16 do `init-prod.py` e contratos estáticos de deploy) |
+
+Novos testes da chave de cadastro cobrem: ausente = aberto (comportamento do upstream preservado); `true/1/yes/on` abre; `false`, vazio e erros de digitação fecham com 403 sem criar conta; login continua funcionando com o cadastro fechado.
+
+Não verificado aqui: emissão real do certificado, redirecionamento HTTP→HTTPS, HTTP/3, healthchecks com `wget` dentro das imagens `nginx:1.29-alpine` e `caddy:2.11-alpine`, consumo real de memória, SSE pelo Caddy + nginx com o app real, `pg_dump`/`neo4j-admin dump`/`load` e as permissões de volume do Neo4j, e o comportamento do laboratório recebendo tráfego pelo NAT do Docker (o teste simula o endereço do cliente).
+
+Para repetir:
+
+```bash
+PYTHONPATH=flowsint-types/src:flowsint-core/src python -m pytest tests/brasil -q
+# Ambiente com as dependências da API (as dos repositórios git do upstream não são necessárias para estes testes):
+cd flowsint-api && REDIS_URL=redis://localhost:6379/0 python -m pytest -q
+python3 scripts/init-prod.py --domain osint.exemplo.com.br --email ti@exemplo.com.br --path /tmp/env.prod
+docker compose --env-file /tmp/env.prod -f compose.br.yml -f compose.prod.yml config -q
+DOMAIN=osint.exemplo.com.br ACME_EMAIL=ti@exemplo.com.br caddy validate --config deploy/Caddyfile --adapter caddyfile
+```
+
+**Observações sobre o upstream encontradas nesta revisão:**
+
+- Cadastro público aberto por padrão e sem limitação de tentativas no login; nenhuma política de senha.
+- `.env.example` traz `AUTH_SECRET=superscretchangeitplz`, uma `MASTER_VAULT_KEY_V1` fixa e `NEO4J_PASSWORD=password`; quem copia sem trocar tem sessões forjáveis. `init-prod.py` recusa esses valores.
+- Token de sessão válido por 60 horas (`ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 60`), sem revogação.
+- O campo `is_active` de `profiles` não é verificado no login nem em `get_current_user`.
+- `/api/auth/users/search` permite a qualquer conta listar e-mails de outras contas por prefixo (pensado para compartilhamento; relevante quando a equipe não deve se conhecer).
+- CORS do upstream usa lista explícita (`ALLOWED_ORIGINS`) com `allow_credentials=True`, sem `*`: adequado.
