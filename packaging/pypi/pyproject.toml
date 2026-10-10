@@ -36,6 +36,11 @@ dependencies = [
     "phonenumbers>=9,<10",
 ]
 
+[project.optional-dependencies]
+# Janela própria em vez do navegador (`osintbr --janela`). Opcional: sem ela,
+# o painel abre no navegador padrão.
+janela = ["pywebview>=5,<7"]
+
 [project.scripts]
 osintbr = "osintbr.cli:main"
 

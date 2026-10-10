@@ -3,3 +3,5 @@
 *.sh text eol=lf
 .env.example text eol=lf
 Makefile text eol=lf
+*.command text eol=lf
+*.bat text eol=crlf

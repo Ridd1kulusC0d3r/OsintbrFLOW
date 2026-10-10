@@ -96,3 +96,39 @@ Foram acrescentadas seis variações de Host aos testes: hosts locais, IPv6, hos
 **Pendente:** executar a célula 4 numa sessão real do Colab e anexar `/content/osintbrflow-autoteste.json` a esta seção. É a primeira evidência de ponta a ponta com proxy Google, Node 24 e as três fontes reais.
 
 **Observação:** `starlette.testclient` emite aviso de depreciação do `httpx`. Não afeta o laboratório, mas o limite `httpx<0.29` em `requirements-brasil.txt` deve ser revisto antes que o aviso vire erro.
+
+
+## Aplicativo de desktop (Degrau 2) — 2026-10-09
+
+**O que mudou:** o comando `osintbr` ganhou `--janela` (janela própria com pywebview, extra opcional `osintbrflow[janela]`) e `--navegador`; dentro do executável, a janela própria é o padrão. Sem pywebview, ou sem suporte gráfico no sistema, o painel abre no navegador com uma linha de aviso. Fechar a janela encerra o servidor. Continua sem opção de escutar fora de `127.0.0.1`; `lab.py` não foi alterado.
+
+**Construído e executado aqui (Linux):** sandbox x86_64, Python 3.12.3, PyInstaller 6.22.3, painel `dist-brasil` já compilado. Comando: `python packaging/desktop/build.py --zip`.
+
+| Item | Resultado |
+|---|---|
+| Formato | Uma pasta (onedir): abre direto, sem descompactar a cada partida como o onefile |
+| Tempo de build | ~33 s |
+| Pasta do aplicativo | 40,4 MB (sem pywebview); 40,9 MB com pywebview |
+| Zip de distribuição (aplicativo + COMECE-AQUI.md + lançadores) | 22,1 MB |
+| Partida a frio até `/health` (cache de disco limpo) | 0,69 s; partidas seguintes 0,63–0,65 s |
+| Conteúdo proibido no pacote (`.env`, `node_modules`, `tests`, banco, venv) | Nenhum (verificado pelo build) |
+
+`python packaging/desktop/smoke_test.py <executável>` (só biblioteca padrão, sem tela) passou no executável, no lançador `abrir-osintbrflow.sh` extraído do zip e no comando `osintbr` instalado a partir do wheel:
+
+| Verificação | Resultado |
+|---|---|
+| `/health` | 200, modo `local-only` |
+| Caso criado com `Origin: http://127.0.0.1:<porta>` / Origin diferente | 201 / 403 |
+| Rota demonstrativa CNPJ `11222333000181` → CEP → município | 3 evidências `ok` |
+| Semente com formato de CPF (sintético `52998224725`) | 422 |
+| Exportação | 1 coleta |
+| Banco em `OSINTBR_HOME/brasil.sqlite3` | Sim |
+| Encerramento por Ctrl+C | Código 0, sem traceback |
+
+Com pywebview 6.2.1 instalado e sem GTK/Qt (caso deste sandbox), `osintbr --janela` e o executável com pywebview empacotado caíram para o navegador com uma linha de aviso, e o Ctrl+C encerrou limpo.
+
+**Suíte:** `tests/brasil` → 80 passaram, 1 ignorado (`test_native.py`, depende do núcleo Flowsint completo). Os 9 testes novos de janela usam um módulo `webview` simulado e não precisam de tela.
+
+**Só o CI vai verificar (`.github/workflows/release.yml`):** build e teste de fumaça no Windows (x64) e no macOS (arm64), ícone `.ico` do Windows (gerado com Pillow), lançadores `.bat` e `.command`, e o fluxo de Release com `SHA256SUMS.txt`. Nada disso foi executado aqui.
+
+**Não verificado em lugar nenhum ainda:** a janela própria aparecendo de fato (WebView2 no Windows, WebKit no macOS); os avisos SmartScreen/Gatekeeper descritos no `COMECE-AQUI.md`; o duplo clique nos lançadores em cada sistema. O macOS não ganhou `.icns` nem pacote `.app`: o executável roda pelo lançador `.command`. Os aplicativos não são assinados.
