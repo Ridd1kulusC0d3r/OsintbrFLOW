@@ -1,33 +1,12 @@
 #!/usr/bin/env python3
-"""Cross-platform launcher for the portable Brazil laboratory."""
+"""Launcher for a development checkout. Installed copies use the `osintbr` command."""
 
-import os
-import subprocess
 import sys
 from pathlib import Path
 
 root = Path(__file__).resolve().parent.parent
-os.chdir(root)
-if not (root / "flowsint-app/dist/brasil.html").exists():
-    raise SystemExit(
-        "Compile o frontend primeiro: npm install --legacy-peer-deps && npm run build --workspace flowsint-app"
-    )
-env = dict(os.environ)
-env["PYTHONPATH"] = os.pathsep.join(
-    str(root / p) for p in ["flowsint-types/src", "flowsint-core/src"]
-)
-raise SystemExit(
-    subprocess.call(
-        [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "osintbr.lab:app",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "8000",
-        ],
-        env=env,
-    )
-)
+sys.path[:0] = [str(root / "flowsint-types/src"), str(root / "flowsint-core/src")]
+
+from osintbr.cli import main  # noqa: E402
+
+main()

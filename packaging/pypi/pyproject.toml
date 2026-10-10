@@ -1,0 +1,54 @@
+# Distribuição do laboratório OSINT Brasil Flow como aplicativo instalável.
+# Empacota o módulo `osintbr`, os tipos e o painel já compilado: quem instala
+# não precisa de Node, Git nem do restante do monorepo Flowsint.
+#
+# Construir (a partir da raiz do repositório):
+#   npm run build:brasil --workspace flowsint-app
+#   python -m build --wheel packaging/pypi
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "osintbrflow"
+version = "0.2.0"
+description = "OSINT Brasil Flow: casos, grafo e evidências com hash para CNPJ, CEP e municípios, no seu computador."
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Deivison Lourenço" }]
+requires-python = ">=3.12"
+keywords = ["osint", "brasil", "cnpj", "cep", "ibge", "investigação"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Intended Audience :: Information Technology",
+    "Natural Language :: Portuguese (Brazilian)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+dependencies = [
+    "fastapi>=0.115,<1",
+    "httpx[socks]>=0.28,<0.29",
+    "uvicorn>=0.30,<1",
+    "pydantic>=2.11,<3",
+    "email-validator>=2,<3",
+    "phonenumbers>=9,<10",
+]
+
+[project.scripts]
+osintbr = "osintbr.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Ridd1kulusC0d3r/OsintbrFLOW"
+
+[tool.hatch.build.targets.wheel]
+# Nada desta pasta vai para o wheel; tudo vem do monorepo abaixo.
+bypass-selection = true
+
+[tool.hatch.build.targets.wheel.force-include]
+"../../flowsint-core/src/osintbr" = "osintbr"
+"../../flowsint-types/src/flowsint_types" = "flowsint_types"
+"../../flowsint-app/dist-brasil" = "osintbr/static"
+"../../LICENSE" = "osintbr/LICENSE"
+"../../NOTICE" = "osintbr/NOTICE"
