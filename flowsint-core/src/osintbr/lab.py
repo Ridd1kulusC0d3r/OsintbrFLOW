@@ -20,6 +20,12 @@ def create_app():
         "http://127.0.0.1:8000", "http://localhost:8000",
         "http://127.0.0.1:5173", "http://localhost:5173",
     }
+    # The `osintbr` command may pick another free port; trust only that one.
+    port = os.getenv("OSINTBR_PORT", "")
+    if port:
+        if not port.isdigit() or not 0 < int(port) < 65536:
+            raise ValueError("OSINTBR_PORT precisa ser uma porta TCP válida.")
+        origins |= {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
     if proxy_origin or token:
         proxy = urlsplit(proxy_origin)
         if (

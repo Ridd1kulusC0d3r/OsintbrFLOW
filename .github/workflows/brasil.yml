@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-brasil.txt pytest pytest-asyncio
-      - run: PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py -q
+      - run: PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py tests/brasil/test_cli.py -q
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -24,3 +24,14 @@ jobs:
       - run: npm run typecheck:brasil --workspace flowsint-app
       - run: npm run build --workspace flowsint-app
       - run: npm run build:brasil --workspace flowsint-app
+      - name: Pacote instalável (wheel) e teste de fumaça
+        run: |
+          pip install build
+          python -m build --wheel packaging/pypi -o dist
+          python -m venv /tmp/app && /tmp/app/bin/pip install dist/*.whl
+          cd /tmp && /tmp/app/bin/osintbr --version
+          /tmp/app/bin/python -c "from osintbr.cli import frontend_dir; assert frontend_dir(), 'painel ausente no wheel'"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: osintbrflow-wheel
+          path: dist/*.whl
