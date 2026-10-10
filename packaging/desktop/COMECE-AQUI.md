@@ -4,6 +4,8 @@ O OSINT Brasil Flow é um laboratório de investigação em fontes abertas que r
 
 Não precisa instalar Python, Node nem criar conta. Também não precisa de chave de API.
 
+**Manual ilustrado:** abra `manual/index.html` (nesta mesma pasta) no navegador. Tem capturas de tela do painel, tutorial do caso demonstrativo, solução de problemas e glossário, e funciona sem internet. Também está em https://github.com/Ridd1kulusC0d3r/OsintbrFLOW/blob/main/docs/manual/index.html
+
 ## Como abrir
 
 Primeiro, **extraia o arquivo .zip inteiro** para uma pasta (por exemplo, Documentos). Não abra o programa de dentro do .zip.

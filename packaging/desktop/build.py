@@ -28,6 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 PANEL = ROOT / "flowsint-app" / "dist-brasil"
+MANUAL = ROOT / "docs" / "manual"  # manual ilustrado (HTML + imagens), copiado para o .zip
 SOURCES = ROOT / "flowsint-core" / "src" / "osintbr" / "sources.json"
 NAME = "OsintbrFLOW"
 
@@ -123,7 +124,7 @@ def size_mb(folder):
 
 
 def package(dist, app):
-    """Pasta de distribuição: COMECE-AQUI.md, lançador do sistema e o aplicativo."""
+    """Pasta de distribuição: COMECE-AQUI.md, manual/, lançador do sistema e o aplicativo."""
     arch = {"amd64": "x64", "x86_64": "x64", "arm64": "arm64", "aarch64": "arm64"}.get(platform.machine().lower(), platform.machine().lower())
     label = f"{NAME}-{version()}-{system()}-{arch}"
     folder = dist / label
@@ -132,6 +133,10 @@ def package(dist, app):
     folder.mkdir()
     shutil.copytree(app, folder / NAME, symlinks=True)
     shutil.copy2(HERE / "COMECE-AQUI.md", folder)
+    if (MANUAL / "index.html").exists():
+        shutil.copytree(MANUAL, folder / "manual")
+    else:
+        print("Manual ausente (docs/manual/index.html): .zip sem manual.")
     for launcher in LAUNCHERS[system()]:
         target = folder / launcher
         shutil.copy2(HERE / "lancadores" / launcher, target)
