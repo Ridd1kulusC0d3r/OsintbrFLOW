@@ -1,0 +1,126 @@
+# OsintbrFLOW — Degrau 3: hospedagem para uma equipe pequena.
+#
+# Sobreposição de compose.br.yml. NUNCA use com compose.lab.yml: o
+# laboratório Brasil não tem login e não pode ficar acessível pela internet.
+#
+#   python scripts/init-prod.py --domain osint.exemplo.com.br --email ti@exemplo.com.br
+#   docker compose --env-file .env.prod -f compose.br.yml -f compose.prod.yml up -d --build
+#
+# O que muda em relação a compose.br.yml:
+# - só o Caddy publica portas (80/443, HTTPS automático); Postgres, Neo4j,
+#   Redis, API e frontend deixam de publicar portas no host;
+# - o Caddy fica numa rede separada ("edge") e só alcança o frontend;
+# - limites de memória/CPU, rotação de logs e políticas de reinício;
+# - cadastro público controlado por FLOWSINT_ALLOW_REGISTRATION
+#   (ausente = fechado). Ver docs/brasil/DEPLOY.md.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+    deploy:
+      resources:
+        limits: {memory: 1g, cpus: "1.0"}
+
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+    # Sem persistência em disco obrigatória: Redis aqui é fila e pub/sub.
+    command: ["redis-server", "--maxmemory", "200mb", "--maxmemory-policy", "noeviction"]
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "0.5"}
+
+  neo4j:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      - NEO4J_server_memory_heap_initial__size=512m
+      - NEO4J_server_memory_heap_max__size=1g
+      - NEO4J_server_memory_pagecache_size=512m
+    deploy:
+      resources:
+        limits: {memory: 2g, cpus: "1.5"}
+
+  api:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      - ALLOWED_ORIGINS=https://${DOMAIN:?Execute python scripts/init-prod.py}
+      - FLOWSINT_ALLOW_REGISTRATION=${FLOWSINT_ALLOW_REGISTRATION:-false}
+    deploy:
+      resources:
+        limits: {memory: 1g, cpus: "1.0"}
+
+  celery:
+    restart: unless-stopped
+    logging: *logging
+    deploy:
+      resources:
+        limits: {memory: 1536m, cpus: "1.5"}
+
+  app:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *logging
+    networks:
+      - flowsint_network
+      - edge
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: {memory: 128m, cpus: "0.5"}
+
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN:?Execute python scripts/init-prod.py}
+      - ACME_EMAIL=${ACME_EMAIL:?Execute python scripts/init-prod.py}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:2019/config/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: {memory: 256m, cpus: "0.5"}
+
+networks:
+  edge:
+    name: osintbrflow_edge
+    driver: bridge
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}

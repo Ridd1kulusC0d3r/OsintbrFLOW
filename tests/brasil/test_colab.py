@@ -73,7 +73,7 @@ def test_proxy_requires_token_on_reads_and_writes(monkeypatch):
 
 def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
     root = Path(__file__).resolve().parents[2]
-    notebook = json.loads((root / "notebooks/OsintbrFLOW_Colab.ipynb").read_text())
+    notebook = json.loads((root / "notebooks/OsintbrFLOW_Colab.ipynb").read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
     code = []
     for cell in notebook["cells"]:
@@ -104,7 +104,7 @@ def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
 def test_proxy_host_is_not_an_authentication_credential(monkeypatch, tmp_path, upstream_host):
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "brasil.html").write_text("<html>OSINT Brasil Flow</html>")
+    (frontend / "brasil.html").write_text("<html>OSINT Brasil Flow</html>", encoding="utf-8")
     monkeypatch.setenv("OSINTBR_FRONTEND", str(frontend))
     client = proxy_client(monkeypatch)
     client.headers["Host"] = upstream_host
@@ -117,3 +117,27 @@ def test_proxy_host_is_not_an_authentication_credential(monkeypatch, tmp_path, u
     assert client.get("/api/brasil/cases").status_code == 200
     assert client.post("/api/brasil/cases", headers={"Origin": ORIGIN}, json={"title": "Proxy test", "purpose": "Verificar Host reescrito"}).status_code == 201
     assert client.get("/api/brasil/cases", headers={"Origin": "https://attacker.test"}).status_code == 403
+
+
+@pytest.mark.parametrize("peer,expected", [
+    ("127.0.0.1", 200), ("::1", 200), ("172.17.0.1", 200), ("192.168.0.10", 200),
+    ("10.0.0.5", 200), ("fd00::1", 200),
+    ("8.8.8.8", 403), ("200.160.2.3", 403), ("2001:4860::1", 403),
+    ("::ffff:200.160.2.3", 403),
+])
+def test_local_mode_refuses_public_peers_even_with_spoofed_host(peer, expected):
+    """The lab has no login: a public source address is refused even when
+    the attacker sends Host: localhost (e.g. port published on 0.0.0.0)."""
+    client = TestClient(create_app(), base_url="http://localhost:8000", client=(peer, 50000))
+    assert client.get("/api/brasil/cases").status_code == expected
+    assert client.get("/health").status_code == expected
+
+
+def test_proxy_mode_does_not_use_peer_address(monkeypatch):
+    """In Colab mode the bearer token is the gate; the proxy's address is irrelevant."""
+    monkeypatch.setenv("OSINTBR_PROXY_ORIGIN", ORIGIN)
+    monkeypatch.setenv("OSINTBR_COLAB_TOKEN", TOKEN)
+    client = TestClient(create_app(), base_url=ORIGIN, client=("8.8.8.8", 50000))
+    assert client.get("/api/brasil/cases").status_code == 401
+    ok = client.get("/api/brasil/cases", headers={"Authorization": "Bearer " + TOKEN})
+    assert ok.status_code == 200

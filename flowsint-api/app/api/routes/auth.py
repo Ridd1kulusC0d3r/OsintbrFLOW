@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +20,17 @@ from flowsint_core.core.services import (
 router = APIRouter()
 
 
+# OSINT Brasil Flow (fork change): hosted deployments must be able to close
+# public sign-up. Unset keeps upstream behaviour (open); any value other than
+# a recognised "true" closes it, so a typo fails closed. Read per request so
+# operators can flip it with a container restart and tests can monkeypatch it.
+def registration_allowed() -> bool:
+    value = os.getenv("FLOWSINT_ALLOW_REGISTRATION")
+    if value is None:
+        return True
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 @router.post("/token")
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)
@@ -33,7 +45,19 @@ def login_for_access_token(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/register", status_code=201)
+def require_open_registration() -> None:
+    # Dependency so the refusal happens before body validation: probing a
+    # closed server with an empty body never needs real credentials.
+    if not registration_allowed():
+        raise HTTPException(
+            status_code=403,
+            detail="Cadastro público desativado neste servidor. Peça uma conta ao administrador.",
+        )
+
+
+@router.post(
+    "/register", status_code=201, dependencies=[Depends(require_open_registration)]
+)
 def register(user: ProfileCreate, db: Session = Depends(get_db)):
     service = create_auth_service(db)
     try:

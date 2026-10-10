@@ -96,3 +96,117 @@ Foram acrescentadas seis variações de Host aos testes: hosts locais, IPv6, hos
 **Pendente:** executar a célula 4 numa sessão real do Colab e anexar `/content/osintbrflow-autoteste.json` a esta seção. É a primeira evidência de ponta a ponta com proxy Google, Node 24 e as três fontes reais.
 
 **Observação:** `starlette.testclient` emite aviso de depreciação do `httpx`. Não afeta o laboratório, mas o limite `httpx<0.29` em `requirements-brasil.txt` deve ser revisto antes que o aviso vire erro.
+
+
+## Aplicativo de desktop (Degrau 2) — 2026-10-09
+
+**O que mudou:** o comando `osintbr` ganhou `--janela` (janela própria com pywebview, extra opcional `osintbrflow[janela]`) e `--navegador`; dentro do executável, a janela própria é o padrão. Sem pywebview, ou sem suporte gráfico no sistema, o painel abre no navegador com uma linha de aviso. Fechar a janela encerra o servidor. Continua sem opção de escutar fora de `127.0.0.1`; este degrau não alterou `lab.py` (o degrau 3 alterou, com a recusa de IP público).
+
+**Construído e executado aqui (Linux):** sandbox x86_64, Python 3.12.3, PyInstaller 6.22.3, painel `dist-brasil` já compilado. Comando: `python packaging/desktop/build.py --zip`.
+
+| Item | Resultado |
+|---|---|
+| Formato | Uma pasta (onedir): abre direto, sem descompactar a cada partida como o onefile |
+| Tempo de build | ~33 s |
+| Pasta do aplicativo | 40,4 MB (sem pywebview); 40,9 MB com pywebview |
+| Zip de distribuição (aplicativo + COMECE-AQUI.md + lançadores) | 22,1 MB |
+| Partida a frio até `/health` (cache de disco limpo) | 0,69 s; partidas seguintes 0,63–0,65 s |
+| Conteúdo proibido no pacote (`.env`, `node_modules`, `tests`, banco, venv) | Nenhum (verificado pelo build) |
+
+`python packaging/desktop/smoke_test.py <executável>` (só biblioteca padrão, sem tela) passou no executável, no lançador `abrir-osintbrflow.sh` extraído do zip e no comando `osintbr` instalado a partir do wheel:
+
+| Verificação | Resultado |
+|---|---|
+| `/health` | 200, modo `local-only` |
+| Caso criado com `Origin: http://127.0.0.1:<porta>` / Origin diferente | 201 / 403 |
+| Rota demonstrativa CNPJ `11222333000181` → CEP → município | 3 evidências `ok` |
+| Semente com formato de CPF (sintético `52998224725`) | 422 |
+| Exportação | 1 coleta |
+| Banco em `OSINTBR_HOME/brasil.sqlite3` | Sim |
+| Encerramento por Ctrl+C | Código 0, sem traceback |
+
+Com pywebview 6.2.1 instalado e sem GTK/Qt (caso deste sandbox), `osintbr --janela` e o executável com pywebview empacotado caíram para o navegador com uma linha de aviso, e o Ctrl+C encerrou limpo.
+
+**Suíte:** `tests/brasil` → 80 passaram, 1 ignorado (`test_native.py`, depende do núcleo Flowsint completo). Os 9 testes novos de janela usam um módulo `webview` simulado e não precisam de tela.
+
+**Só o CI vai verificar (`.github/workflows/release.yml`):** build e teste de fumaça no Windows (x64) e no macOS (arm64), ícone `.ico` do Windows (gerado com Pillow), lançadores `.bat` e `.command`, e o fluxo de Release com `SHA256SUMS.txt`. Nada disso foi executado aqui.
+
+**Não verificado em lugar nenhum ainda:** a janela própria aparecendo de fato (WebView2 no Windows, WebKit no macOS); os avisos SmartScreen/Gatekeeper descritos no `COMECE-AQUI.md`; o duplo clique nos lançadores em cada sistema. O macOS não ganhou `.icns` nem pacote `.app`: o executável roda pelo lançador `.command`. Os aplicativos não são assinados.
+
+
+## Degrau 3 — hospedagem para equipe — 2026-10-09
+
+**Escopo:** `compose.prod.yml`, `deploy/Caddyfile`, `scripts/init-prod.py`, chave `FLOWSINT_ALLOW_REGISTRATION` na API, recusa de IPs públicos no laboratório e o guia `docs/brasil/DEPLOY.md`.
+
+**Ambiente:** sandbox Linux x86_64, Python 3.13, Docker Compose v5.5.1 **sem daemon Docker**, Caddy v2.11.4 (binário oficial distribuído no pacote PyPI `caddy-bin`). Sem DNS público, sem portas 80/443 alcançáveis, sem Let's Encrypt.
+
+> **Uma implantação real não foi executada.** Nenhuma imagem foi compilada, nenhum container subiu, nenhum certificado foi emitido, e os comandos de backup e restauração do DEPLOY.md não foram rodados. O primeiro deploy numa VPS é o primeiro teste de ponta a ponta.
+
+| Verificação | Resultado |
+|---|---|
+| `docker compose --env-file <gerado> -f compose.br.yml -f compose.prod.yml config` | Passou. Só `caddy` publica portas (80, 443, 443/udp); `postgres`, `redis`, `neo4j`, `api`, `app` sem portas; todos com `restart: unless-stopped`, limite de memória, rotação de log 10 MB × 5 e healthcheck; `ALLOWED_ORIGINS=https://<domínio>` e `FLOWSINT_ALLOW_REGISTRATION=false` na API |
+| Mesmo comando sem `DOMAIN` | Falha com “required variable DOMAIN is missing” (esperado) |
+| `caddy validate` e `caddy fmt` | “Valid configuration”; arquivo formatado |
+| Caddy rodando localmente em HTTP contra um servidor simulado no lugar do nginx | HSTS, `nosniff`, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, `Referrer-Policy`, `Permissions-Policy` presentes; `X-Frame-Options` do upstream substituído (não duplicado); `Server` removido; Host repassado como `localhost`; corpo de 11 MB → **413**, corpo pequeno → 200. Atenção: com o nginx real, o limite efetivo era 1 MB (padrão do nginx); corrigido depois com `client_max_body_size 10m` no `flowsint-app/nginx.conf` |
+| Testes da API (`flowsint-api/tests`) | **32 passaram** (17 existentes + 15 novos da chave de cadastro) |
+| Testes `tests/brasil` | **86 passaram, 1 ignorado** (59 anteriores + 11 de recusa de IP público no laboratório + 16 do `init-prod.py` e contratos estáticos de deploy) |
+
+Novos testes da chave de cadastro cobrem: ausente = aberto (comportamento do upstream preservado); `true/1/yes/on` abre; `false`, vazio e erros de digitação fecham com 403 sem criar conta; login continua funcionando com o cadastro fechado.
+
+Não verificado aqui: emissão real do certificado, redirecionamento HTTP→HTTPS, HTTP/3, healthchecks com `wget` dentro das imagens `nginx:1.29-alpine` e `caddy:2.11-alpine`, consumo real de memória, SSE pelo Caddy + nginx com o app real, `pg_dump`/`neo4j-admin dump`/`load` e as permissões de volume do Neo4j, e o comportamento do laboratório recebendo tráfego pelo NAT do Docker (o teste simula o endereço do cliente).
+
+Para repetir:
+
+```bash
+PYTHONPATH=flowsint-types/src:flowsint-core/src python -m pytest tests/brasil -q
+# Ambiente com as dependências da API (as dos repositórios git do upstream não são necessárias para estes testes):
+cd flowsint-api && REDIS_URL=redis://localhost:6379/0 python -m pytest -q
+python3 scripts/init-prod.py --domain osint.exemplo.com.br --email ti@exemplo.com.br --path /tmp/env.prod
+docker compose --env-file /tmp/env.prod -f compose.br.yml -f compose.prod.yml config -q
+DOMAIN=osint.exemplo.com.br ACME_EMAIL=ti@exemplo.com.br caddy validate --config deploy/Caddyfile --adapter caddyfile
+```
+
+**Observações sobre o upstream encontradas nesta revisão:**
+
+- Cadastro público aberto por padrão e sem limitação de tentativas no login; nenhuma política de senha.
+- `.env.example` traz `AUTH_SECRET=superscretchangeitplz`, uma `MASTER_VAULT_KEY_V1` fixa e `NEO4J_PASSWORD=password`; quem copia sem trocar tem sessões forjáveis. `init-prod.py` recusa esses valores.
+- Token de sessão válido por 60 horas (`ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 60`), sem revogação.
+- O campo `is_active` de `profiles` não é verificado no login nem em `get_current_user`.
+- `/api/auth/users/search` permite a qualquer conta listar e-mails de outras contas por prefixo (pensado para compartilhamento; relevante quando a equipe não deve se conhecer).
+- CORS do upstream usa lista explícita (`ALLOWED_ORIGINS`) com `allow_credentials=True`, sem `*`: adequado.
+
+
+## Integração 0.2, CI em três sistemas e revisão independente — 2026-10-09
+
+**CI do GitHub (nuvem):** testes, build do painel, PyInstaller e teste de fumaça aprovados em **Windows x64, macOS arm64 e Linux x64**. Zips: Windows 31 MB, macOS 36 MB, Linux 48 MB (tamanhos dos artefatos na CI). A partir desta entrega a CI também extrai o `.zip` publicado e repete o teste de fumaça sobre a cópia extraída.
+
+**Defeitos encontrados pela CI e corrigidos:**
+
+| Defeito | Efeito para o usuário | Correção |
+|---|---|---|
+| `sources.json` lido com a codificação padrão do sistema | No Windows (cp1252) a aba **Catálogo** falharia | Leituras de texto com `encoding="utf-8"`; CI Linux trata codificação implícita como erro; teste estático |
+| Teste de fumaça recebia caminho relativo | Falso negativo na CI | Caminho resolvido para absoluto |
+| `PYTHONPATH` com `:` no Windows | Testes não eram coletados | Separador por sistema |
+
+**Revisão independente (agente que não participou da produção):** nenhum achado de severidade alta. Corrigidos nesta entrega:
+
+| Achado | Severidade | Correção |
+|---|---|---|
+| Recusa de IP público não cobre IPv6 encaminhado pelo `docker-proxy`; DEPLOY.md afirmava cobertura ampla | Média | Texto corrigido; reforçado publicar só em `127.0.0.1` |
+| `.env.prod` fora do `.gitignore` | Média | `.env.*` ignorado (exceto `.env.example`) |
+| Verificação de saúde passava pelo proxy HTTP do sistema; em máquinas corporativas o app fechava após 30 s | Média | Conexões locais ignoram proxy; teste com proxy inalcançável |
+| Comando de verificação do DEPLOY.md criava conta real se o cadastro estivesse aberto | Média | Recusa movida para dependência (antes da validação); verificação com corpo vazio: 403 fechado, 422 aberto, nenhuma conta |
+| nginx limitava envios a 1 MB apesar do Caddy aceitar 10 MB | Média | `client_max_body_size 10m` |
+| `.zip` não preservava links simbólicos; CI não testava o zip | Média | Zip próprio preserva links e permissões; CI testa o zip extraído |
+| Porta tomada entre sondagem e início: saída 0 após 30 s | Baixa | Detecta servidor parado e sai com código 1 |
+| `--port 70000` gerava traceback | Baixa | Erro de uso limpo |
+| `.env.prod` legível por instantes antes do `chmod` | Baixa | Criado já com modo 600 |
+| `X-Forwarded-For` aceito se alguém configurasse `FORWARDED_ALLOW_IPS` no laboratório Docker | Baixa | `--no-proxy-headers` no `Dockerfile.brasil` |
+| Checagem de Content-Type por substring | Baixa | Compara o tipo principal |
+| Instrução de macOS (botão direito → Abrir) não vale no macOS 15 | Baixa | Caminho por Ajustes do Sistema como passo principal |
+
+**Não corrigidos (registrados):** 6to4/Teredo tratados como não públicos pela recusa de IP; ações do GitHub fixadas por versão maior, sem SHA nem atestado de proveniência; `SHA256SUMS` gerado no mesmo pipeline; sem checagem de que a tag corresponde à versão do pacote. Riscos herdados do upstream continuam listados na seção do degrau 3.
+
+**Suítes finais:** `tests/brasil` 117 passaram, 1 ignorado; `flowsint-api` 33 passaram. Linux: executável reconstruído, `.zip` extraído com `unzip` e aprovado no teste de fumaça com `HTTP_PROXY` apontando para um proxy inalcançável.
+
+**Ainda não verificado:** janela nativa aparecendo de fato (WebView2/WebKit); dois cliques e avisos SmartScreen/Gatekeeper em máquina real; sessão real do Colab; implantação real em VPS com certificado.

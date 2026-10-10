@@ -15,7 +15,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements-brasil.txt pytest pytest-asyncio
-      - run: PYTHONPATH=flowsint-types/src:flowsint-core/src pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py tests/brasil/test_cli.py -q
+      - run: PYTHONPATH=flowsint-types/src:flowsint-core/src python -X warn_default_encoding -W error::EncodingWarning -m pytest tests/brasil -q --ignore=tests/brasil/test_native.py
       - uses: actions/setup-node@v4
         with:
           node-version: '24'

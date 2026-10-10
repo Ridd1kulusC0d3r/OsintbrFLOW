@@ -1,0 +1,122 @@
+name: Aplicativo de desktop
+# Gera o aplicativo de dois cliques para Windows, macOS (Apple Silicon) e Linux,
+# testa cada um sem tela e, em tags v*, publica uma Release com zips, wheel e
+# SHA256SUMS.txt. Nada aqui é assinado (sem certificado Microsoft/Apple).
+on:
+  push:
+    tags: ['v*']
+  # Em PRs que mexem no aplicativo, só constrói e testa (a Release exige tag).
+  pull_request:
+    paths:
+      - 'packaging/**'
+      - 'flowsint-core/src/osintbr/**'
+      - 'flowsint-types/src/**'
+      - 'flowsint-app/src/**'
+      - '.github/workflows/release.yml'
+      - 'docs/manual/**'
+      - 'requirements-brasil.txt'
+      - 'package-lock.json'
+      - 'flowsint-app/package.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  app:
+    name: app (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Painel compilado
+        run: |
+          npm ci --ignore-scripts --legacy-peer-deps
+          npm run build:brasil --workspace flowsint-app
+          git checkout -- yarn.lock
+      - name: Testes
+        run: |
+          python -m pip install -r requirements-brasil.txt pytest pytest-asyncio
+          sep=":"; [ "$RUNNER_OS" = Windows ] && sep=";"
+          PYTHONPATH="flowsint-types/src${sep}flowsint-core/src" python -m pytest tests/brasil/test_brasil.py tests/brasil/test_colab.py tests/brasil/test_cli.py -q 2>&1 | tee "$RUNNER_TEMP/etapa.log"
+      - name: Wheel (osintbrflow) e teste de fumaça do comando osintbr
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install build
+          python -m build --wheel packaging/pypi -o dist
+          python -m venv "$RUNNER_TEMP/wheel"
+          "$RUNNER_TEMP/wheel/bin/pip" install dist/*.whl
+          python packaging/desktop/smoke_test.py "$RUNNER_TEMP/wheel/bin/osintbr"
+      - name: Janela própria (pywebview) no Windows e macOS
+        # No Linux o pywebview depende de GTK/Qt do sistema; lá o painel abre no navegador.
+        if: runner.os != 'Linux'
+        run: python -m pip install "pywebview>=5,<7"
+      - name: Aplicativo (PyInstaller)
+        run: |
+          python -m pip install "pyinstaller>=6.10,<7" "pillow>=11,<13"
+          python packaging/desktop/build.py --zip
+      - name: Teste de fumaça do aplicativo
+        run: |
+          exe=packaging/desktop/dist/OsintbrFLOW/OsintbrFLOW
+          [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          python packaging/desktop/smoke_test.py "$exe" 2>&1 | tee "$RUNNER_TEMP/etapa.log"
+      - name: Teste de fumaça do .zip publicado (extraído como o usuário faria)
+        run: |
+          zipfile=$(ls packaging/desktop/dist/*.zip)
+          out="$RUNNER_TEMP/zip-extraido"
+          rm -rf "$out" && mkdir -p "$out"
+          if [ "$RUNNER_OS" = Windows ]; then 7z x -bso0 -o"$out" "$zipfile"; else unzip -q "$zipfile" -d "$out"; fi
+          exe="$(ls -d "$out"/*/OsintbrFLOW)/OsintbrFLOW"
+          [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          ls "$out"/*/manual/index.html "$out"/*/COMECE-AQUI.md
+          python packaging/desktop/smoke_test.py "$exe" 2>&1 | tee "$RUNNER_TEMP/etapa.log"
+      - name: Resumo da falha (visível nas anotações)
+        if: failure()
+        run: |
+          [ -f "$RUNNER_TEMP/etapa.log" ] || exit 0
+          msg=$(tail -n 40 "$RUNNER_TEMP/etapa.log" | sed -e 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Falha em ${RUNNER_OS}::${msg}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ runner.os }}
+          path: packaging/desktop/dist/*.zip
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Linux'
+        with:
+          name: wheel
+          path: dist/*.whl
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: SHA256SUMS.txt
+        working-directory: release
+        run: sha256sum *.zip *.whl > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Publicar Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/* \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --title "OsintbrFLOW $GITHUB_REF_NAME"

@@ -40,7 +40,7 @@ def build_router(owner_dependency, store=None, provider=None):
 
     @router.get("/sources")
     def sources(owner=Depends(owner_dependency)):
-        return json.loads(Path(__file__).with_name("sources.json").read_text())
+        return json.loads(Path(__file__).with_name("sources.json").read_text(encoding="utf-8"))
 
     @router.get("/cases")
     def cases(owner=Depends(owner_dependency)):

@@ -10,7 +10,7 @@
 ![Alpha](https://img.shields.io/badge/status-alpha_0.1.0-e4bc76)
 ![License](https://img.shields.io/badge/license-Apache--2.0-80e8b6)
 
-[Começar](#começar-em-modo-laboratório) · [Arquitetura](docs/brasil/ARCHITECTURE.md) · [Pesquisa comparativa](docs/brasil/RESEARCH.md) · [Roadmap](docs/brasil/ROADMAP.md) · [Validação](docs/brasil/VALIDATION.md)
+[Começar](#começar-em-modo-laboratório) · [Manual ilustrado](docs/manual/index.html) · [Arquitetura](docs/brasil/ARCHITECTURE.md) · [Pesquisa comparativa](docs/brasil/RESEARCH.md) · [Roadmap](docs/brasil/ROADMAP.md) · [Validação](docs/brasil/VALIDATION.md)
 
 </div>
 
@@ -53,6 +53,14 @@ O atlas **não significa 1.171 integrações**. Fontes manuais estão rotuladas;
 A recusa de CPF é uma decisão de projeto, não uma limitação temporária: o escopo é investigação empresarial e territorial, e a ferramenta não resolve identidade de pessoas. O valor recusado não é enviado a fontes, não aparece na mensagem de erro e não é gravado no caso.
 
 ## Começar em modo laboratório
+
+### Baixar o aplicativo
+
+O laboratório também é distribuído como aplicativo de dois cliques para Windows, macOS (Apple Silicon) e Linux, sem instalar Python nem Node. Os pacotes ficam na página de [Releases](https://github.com/Ridd1kulusC0d3r/OsintbrFLOW/releases), junto com `SHA256SUMS.txt`. **Ainda não há versão publicada:** a primeira aparece quando uma tag `v*` for criada. Até lá, use um dos caminhos abaixo.
+
+Cada `.zip` traz um `COMECE-AQUI.md` e o [manual ilustrado](docs/manual/index.html) (`manual/index.html`, abre sem internet) com o passo a passo por sistema, incluindo os avisos de aplicativo não assinado (SmartScreen e Gatekeeper). O aplicativo escuta só em `127.0.0.1` e guarda os casos na pasta de dados do usuário.
+
+Quem já tem Python 3.12+ pode usar o pacote Python (wheel), anexado à mesma Release, com o [pipx](https://pipx.pypa.io/): `pipx install ./osintbrflow-*.whl` e depois `osintbr` (ou `osintbr --janela` com o extra `janela`). O pacote ainda não está publicado no PyPI.
 
 | Caminho | Para quem | Instala no computador? |
 |---|---|---|
@@ -140,6 +148,19 @@ Abra **http://localhost:5173/register**, crie sua conta e acesse **Brasil Flow**
 O Compose BR **compila este repositório**, em vez de baixar imagens upstream que não contêm as alterações brasileiras. Inclui PostgreSQL, Neo4j, Redis, API, worker e frontend. O socket Docker do host não é montado por padrão: enriquecedores upstream que lançam ferramentas em containers exigem configuração adicional consciente; os conectores brasileiros não dependem dele.
 
 O modo completo ainda precisa de um teste de implantação de ponta a ponta com esses serviços reais. A compilação do frontend, a lógica dos enriquecedores e a importação de grafo foram testadas separadamente.
+
+### Hospedar para uma equipe
+
+> **⚠️ O laboratório Brasil (`compose.lab.yml`, `scripts/brasil.py`, porta 8000) não tem login e não deve ser exposto à internet, nem atrás de proxy ou túnel.** Para uso em equipe, hospede só o fork completo, que tem contas individuais.
+
+O guia [docs/brasil/DEPLOY.md](docs/brasil/DEPLOY.md) cobre uma VPS Linux com Docker: HTTPS automático com Caddy, portas internas fechadas, segredos gerados por `scripts/init-prod.py`, cadastro público fechado por padrão (`FLOWSINT_ALLOW_REGISTRATION=false`), backups com ensaio de restauração, lista de conferência de segurança e um roteiro mínimo de LGPD.
+
+```bash
+python3 scripts/init-prod.py --domain osint.suaorg.com.br --email ti@suaorg.com.br
+docker compose --env-file .env.prod -f compose.br.yml -f compose.prod.yml up -d --build
+```
+
+Os arquivos foram validados de forma estática (combinação Compose, configuração do Caddy, testes); **nenhuma implantação real foi executada ainda**. O guia lista o que não está feito: limitação de taxa no login, WAF, SSO/2FA, RBAC granular, armazenamento WORM.
 
 ### Percurso no editor de fluxos nativo
 

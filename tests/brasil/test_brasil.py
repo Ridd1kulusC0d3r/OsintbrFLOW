@@ -278,3 +278,16 @@ def test_person_identifier_is_refused_before_any_request(tmp_path, seed, kind, s
     assert calls == []
     assert seed.replace(".", "").replace("-", "")[:9] not in response.text
     assert client.get(f"/api/cases/{case['id']}").json()["runs"] == []
+
+
+def test_text_files_are_read_as_utf8_on_every_os():
+    # Windows defaults to cp1252: the catalog (sources.json) failed to load there.
+    import ast
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    files = list((root / "flowsint-core/src/osintbr").glob("*.py")) + [root / "scripts/verify-bundle.py"]
+    for path in files:
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in {"read_text", "write_text"}:
+                assert any(k.arg == "encoding" for k in node.keywords), f"{path.name}:{node.lineno}"

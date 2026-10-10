@@ -185,3 +185,7 @@ cython_debug/
 data/
 *.sqlite3*
 .env
+
+# Segredos de produção gerados por scripts/init-prod.py
+.env.*
+!.env.example

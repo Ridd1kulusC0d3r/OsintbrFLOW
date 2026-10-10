@@ -1,6 +1,7 @@
 """Single-user laboratory: localhost, or an explicitly configured Colab proxy."""
 
 import hmac
+import ipaddress
 import os
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -10,6 +11,24 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import build_router
+
+
+def is_public_client(address):
+    """True when the TCP peer is a globally routable address.
+
+    Defence in depth for the unauthenticated local mode: inside Docker the
+    lab binds 0.0.0.0 and cannot see whether the host published the port on
+    127.0.0.1 (compose.lab.yml) or on every interface. Traffic forwarded from
+    the internet keeps its public source address, so it is refused here.
+    LAN peers, reverse proxies on the same host and the Docker bridge are
+    private addresses and are NOT caught: never expose the lab.
+    """
+    try:
+        ip = ipaddress.ip_address(address or "")
+    except ValueError:
+        return False  # Unix socket or test transport: no network peer.
+    ip = getattr(ip, "ipv4_mapped", None) or ip
+    return ip.is_global
 
 
 def create_app():
@@ -51,6 +70,11 @@ def create_app():
         # Keep DNS-rebinding protection for the unauthenticated local mode.
         if not token and host not in hosts:
             return JSONResponse({"detail": "Host não autorizado."}, status_code=403)
+        if not token and is_public_client(request.client.host if request.client else None):
+            return JSONResponse(
+                {"detail": "Laboratório sem login: acesso pela internet recusado. Veja docs/brasil/DEPLOY.md."},
+                status_code=403,
+            )
         origin = request.headers.get("origin")
         if origin and origin not in origins:
             return JSONResponse({"detail": "Origem não autorizada."}, status_code=403)
@@ -58,7 +82,8 @@ def create_app():
             authorization = request.headers.get("authorization", "")
             if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
                 return JSONResponse({"detail": "Chave da sessão ausente ou inválida."}, status_code=401)
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and "application/json" not in request.headers.get("content-type", ""):
+        media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and media_type != "application/json":
             return JSONResponse({"detail": "Envie application/json."}, status_code=415)
         response = await call_next(request)
         if token:
