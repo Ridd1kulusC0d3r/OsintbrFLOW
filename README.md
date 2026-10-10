@@ -10,7 +10,7 @@
 ![Alpha](https://img.shields.io/badge/status-alpha_0.1.0-e4bc76)
 ![License](https://img.shields.io/badge/license-Apache--2.0-80e8b6)
 
-[Começar](#começar-em-modo-laboratório) · [Arquitetura](docs/brasil/ARCHITECTURE.md) · [Pesquisa comparativa](docs/brasil/RESEARCH.md) · [Roadmap](docs/brasil/ROADMAP.md) · [Validação](docs/brasil/VALIDATION.md)
+[Começar](#começar-em-modo-laboratório) · [Manual ilustrado](docs/manual/index.html) · [Arquitetura](docs/brasil/ARCHITECTURE.md) · [Pesquisa comparativa](docs/brasil/RESEARCH.md) · [Roadmap](docs/brasil/ROADMAP.md) · [Validação](docs/brasil/VALIDATION.md)
 
 </div>
 
@@ -58,7 +58,7 @@ A recusa de CPF é uma decisão de projeto, não uma limitação temporária: o 
 
 O laboratório também é distribuído como aplicativo de dois cliques para Windows, macOS (Apple Silicon) e Linux, sem instalar Python nem Node. Os pacotes ficam na página de [Releases](https://github.com/Ridd1kulusC0d3r/OsintbrFLOW/releases), junto com `SHA256SUMS.txt`. **Ainda não há versão publicada:** a primeira aparece quando uma tag `v*` for criada. Até lá, use um dos caminhos abaixo.
 
-Cada `.zip` traz um `COMECE-AQUI.md` com o passo a passo por sistema, incluindo os avisos de aplicativo não assinado (SmartScreen e Gatekeeper). O aplicativo escuta só em `127.0.0.1` e guarda os casos na pasta de dados do usuário.
+Cada `.zip` traz um `COMECE-AQUI.md` e o [manual ilustrado](docs/manual/index.html) (`manual/index.html`, abre sem internet) com o passo a passo por sistema, incluindo os avisos de aplicativo não assinado (SmartScreen e Gatekeeper). O aplicativo escuta só em `127.0.0.1` e guarda os casos na pasta de dados do usuário.
 
 Quem já tem Python 3.12+ pode usar o pacote Python (wheel), anexado à mesma Release, com o [pipx](https://pipx.pypa.io/): `pipx install ./osintbrflow-*.whl` e depois `osintbr` (ou `osintbr --janela` com o extra `janela`). O pacote ainda não está publicado no PyPI.
 
