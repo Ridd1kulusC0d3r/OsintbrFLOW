@@ -36,7 +36,8 @@ def request(method, url, origin=None, body=None):
         headers["Origin"] = origin
     req = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=30) as response:
+        # Bypass any HTTP proxy from the environment: the app is on 127.0.0.1.
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req, timeout=30) as response:
             return response.status, decode(response)
     except urllib.error.HTTPError as error:
         return error.code, decode(error)

@@ -45,13 +45,20 @@ def login_for_access_token(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@router.post("/register", status_code=201)
-def register(user: ProfileCreate, db: Session = Depends(get_db)):
+def require_open_registration() -> None:
+    # Dependency so the refusal happens before body validation: probing a
+    # closed server with an empty body never needs real credentials.
     if not registration_allowed():
         raise HTTPException(
             status_code=403,
             detail="Cadastro público desativado neste servidor. Peça uma conta ao administrador.",
         )
+
+
+@router.post(
+    "/register", status_code=201, dependencies=[Depends(require_open_registration)]
+)
+def register(user: ProfileCreate, db: Session = Depends(get_db)):
     service = create_auth_service(db)
     try:
         return service.register(user.email, user.password)

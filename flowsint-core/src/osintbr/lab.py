@@ -82,7 +82,8 @@ def create_app():
             authorization = request.headers.get("authorization", "")
             if not hmac.compare_digest(authorization.encode(), ("Bearer " + token).encode()):
                 return JSONResponse({"detail": "Chave da sessão ausente ou inválida."}, status_code=401)
-        if request.method not in {"GET", "HEAD", "OPTIONS"} and "application/json" not in request.headers.get("content-type", ""):
+        media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and media_type != "application/json":
             return JSONResponse({"detail": "Envie application/json."}, status_code=415)
         response = await call_next(request)
         if token:

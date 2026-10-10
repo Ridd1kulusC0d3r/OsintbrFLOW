@@ -19,10 +19,13 @@ sources.json. Nada de .env, venvs, testes, dados de casos ou node_modules.
 
 import argparse
 import importlib.util
+import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -147,10 +150,49 @@ def package(dist, app):
         target = folder / "pipx" / launcher
         shutil.copy2(HERE / "lancadores" / "pipx" / launcher, target)
         target.chmod(0o755)
-    # zipfile guarda as permissões Unix: os lançadores continuam executáveis.
-    archive = shutil.make_archive(str(dist / label), "zip", root_dir=dist, base_dir=label)
-    print(f"Zip: {archive} ({Path(archive).stat().st_size / 1_000_000:.1f} MB)")
-    return Path(archive)
+    archive = make_zip(dist, label, dist / f"{label}.zip")
+    print(f"Zip: {archive} ({archive.stat().st_size / 1_000_000:.1f} MB)")
+    return archive
+
+
+def make_zip(root, base, archive):
+    """Zip preserving Unix modes and symbolic links.
+
+    shutil.make_archive turns links into copies or empty folders, which breaks
+    the frameworks PyInstaller lays out on macOS. `unzip` and Finder restore
+    entries stored this way; Windows bundles have no links.
+    """
+    archive = Path(archive)
+    archive.unlink(missing_ok=True)
+
+    def add_link(zf, path, name):
+        info = zipfile.ZipInfo(name)
+        info.create_system = 3
+        info.external_attr = (stat.S_IFLNK | 0o777) << 16
+        zf.writestr(info, os.readlink(path))
+
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for folder, dirs, files in os.walk(root / base):
+            folder = Path(folder)
+            for name in sorted(dirs):
+                path = folder / name
+                arcname = path.relative_to(root).as_posix()
+                if path.is_symlink():
+                    add_link(zf, path, arcname)
+                    dirs.remove(name)
+                    continue
+                info = zipfile.ZipInfo(arcname + "/")
+                info.create_system = 3
+                info.external_attr = (stat.S_IFDIR | 0o755) << 16
+                zf.writestr(info, "")
+            for name in sorted(files):
+                path = folder / name
+                arcname = path.relative_to(root).as_posix()
+                if path.is_symlink():
+                    add_link(zf, path, arcname)
+                else:
+                    zf.write(path, arcname)
+    return archive
 
 
 def main(argv=None):

@@ -58,11 +58,18 @@ def frontend_dir(explicit=None):
     return None
 
 
-def wait_ready(health, timeout=30):
+# Local health checks must never go through a system/corporate HTTP proxy.
+LOCAL = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def wait_ready(health, timeout=30, alive=lambda: True):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
+        if not alive():
+            print("O servidor parou durante a inicialização (porta ocupada?).", file=sys.stderr, flush=True)
+            return False
         try:
-            with urllib.request.urlopen(health, timeout=1) as response:
+            with LOCAL.open(health, timeout=1) as response:
                 if response.status == 200:
                     return True
         except OSError:
@@ -122,8 +129,8 @@ def serve_in_window(server, url, health, webview):
     thread = threading.Thread(target=server.run, name="osintbr-servidor", daemon=True)
     thread.start()
     try:
-        if not wait_ready(health):
-            return
+        if not wait_ready(health, alive=thread.is_alive):
+            raise SystemExit(1)
         print(f"OSINT Brasil Flow pronto em {url}", flush=True)
         print("Fechar a janela do painel encerra o laboratório.", flush=True)
         # pywebview logs a traceback per missing GUI toolkit; one line is enough here.
@@ -141,12 +148,22 @@ def serve_in_window(server, url, health, webview):
         thread.join(timeout=10)
 
 
+def port_number(text):
+    try:
+        value = int(text)
+    except ValueError:
+        value = -1
+    if not 0 <= value <= 65535:
+        raise argparse.ArgumentTypeError("use um número entre 0 e 65535")
+    return value
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="osintbr",
         description="Laboratório OSINT Brasil Flow: casos, grafo e evidências com hash, no seu computador.",
     )
-    parser.add_argument("--port", type=int, default=8000, help="porta local preferida (padrão: 8000; outra livre se ocupada)")
+    parser.add_argument("--port", type=port_number, default=8000, help="porta local preferida (padrão: 8000; outra livre se ocupada)")
     parser.add_argument("--data-dir", type=Path, help="pasta dos casos (padrão: pasta de dados do usuário)")
     parser.add_argument("--frontend", type=Path, help=argparse.SUPPRESS)
     shown = parser.add_mutually_exclusive_group()

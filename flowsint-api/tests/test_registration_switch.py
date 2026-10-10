@@ -70,3 +70,12 @@ def test_closed_registration_does_not_block_login(client, monkeypatch):
     )
     assert res.status_code == 200
     assert res.json()["access_token"]
+
+
+def test_documented_probe_never_creates_an_account(client, db_session, monkeypatch):
+    # DEPLOY.md probes with an empty body: 403 when closed, 422 when open.
+    monkeypatch.setenv("FLOWSINT_ALLOW_REGISTRATION", "false")
+    assert client.post("/api/auth/register", json={}).status_code == 403
+    monkeypatch.setenv("FLOWSINT_ALLOW_REGISTRATION", "true")
+    assert client.post("/api/auth/register", json={}).status_code == 422
+    assert db_session.query(Profile).count() == 0

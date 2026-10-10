@@ -13,7 +13,7 @@ Primeiro, **extraia o arquivo .zip inteiro** para uma pasta (por exemplo, Docume
 | Sistema | O que fazer |
 |---|---|
 | **Windows** | Dê dois cliques em **Abrir OsintbrFLOW.bat** |
-| **macOS** | Clique com o botão direito em **Abrir OsintbrFLOW.command** → **Abrir** (só da primeira vez; depois, dois cliques) |
+| **macOS** | Dê dois cliques em **Abrir OsintbrFLOW.command**; na primeira vez, libere em **Ajustes do Sistema → Privacidade e Segurança** (veja abaixo) |
 | **Linux** | Dê dois cliques em **abrir-osintbrflow.sh** (se o gerenciador de arquivos perguntar, escolha "Executar"). No terminal: `./abrir-osintbrflow.sh` |
 
 Abre uma janela de texto (o "motor" do laboratório) e, em seguida, o painel: numa janela própria ou no seu navegador. **Deixe a janela de texto aberta** enquanto usa o painel. Para encerrar, feche o painel e depois a janela de texto (ou pressione Ctrl+C nela).
@@ -28,8 +28,9 @@ Este aplicativo é gratuito e ainda não tem assinatura digital paga da Microsof
 
 **macOS (Gatekeeper):** aparece "não pode ser aberto porque é de um desenvolvedor não identificado".
 
-1. Clique com o botão direito (ou Control + clique) em **Abrir OsintbrFLOW.command** e escolha **Abrir**. Confirme em **Abrir**.
-2. Se ainda assim não abrir: vá em **Ajustes do Sistema → Privacidade e Segurança**, role até o fim e clique em **Abrir Mesmo Assim** ao lado do aviso sobre o OsintbrFLOW. Depois abra de novo.
+1. Dê dois cliques em **Abrir OsintbrFLOW.command**. O macOS vai bloquear e mostrar um aviso: feche-o.
+2. Vá em **Ajustes do Sistema → Privacidade e Segurança**, role até o fim e clique em **Abrir Mesmo Assim** ao lado do aviso sobre o OsintbrFLOW. Confirme com sua senha e abra de novo.
+3. Em versões anteriores ao macOS 15 (Sequoia), também funciona clicar com o botão direito no lançador e escolher **Abrir**; no macOS 15 em diante, esse atalho não existe mais.
 
 Só faça isso se você baixou o arquivo da página oficial de Releases do projeto. Para conferir, compare o SHA-256 do .zip com o arquivo `SHA256SUMS.txt` publicado junto.
 

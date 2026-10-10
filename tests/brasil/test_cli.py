@@ -148,7 +148,7 @@ def test_window_options_are_mutually_exclusive():
 def test_closing_the_window_stops_the_server(monkeypatch):
     server = FakeServer()
     webview = FakeWebview()
-    monkeypatch.setattr(cli, "wait_ready", lambda health, timeout=30: True)
+    monkeypatch.setattr(cli, "wait_ready", lambda health, **kwargs: True)
     monkeypatch.setattr(webview, "start", lambda: FakeWebview.start(webview, server))
     cli.serve_in_window(server, "http://127.0.0.1:1/brasil.html", "http://127.0.0.1:1/health", webview)
     assert webview.windows == [("OSINT Brasil Flow", "http://127.0.0.1:1/brasil.html")]
@@ -159,7 +159,7 @@ def test_closing_the_window_stops_the_server(monkeypatch):
 def test_window_failure_falls_back_to_browser(monkeypatch, capsys):
     server = FakeServer()
     opened = []
-    monkeypatch.setattr(cli, "wait_ready", lambda health, timeout=30: True)
+    monkeypatch.setattr(cli, "wait_ready", lambda health, **kwargs: True)
     monkeypatch.setattr(cli.webbrowser, "open", opened.append)
     # Simulate the user pressing Ctrl+C while the browser fallback is serving.
     def interrupted(thread):
@@ -174,8 +174,11 @@ def test_window_failure_falls_back_to_browser(monkeypatch, capsys):
 def test_server_that_never_answers_is_still_stopped(monkeypatch):
     server = FakeServer()
     webview = FakeWebview()
-    monkeypatch.setattr(cli, "wait_ready", lambda health, timeout=30: False)
-    cli.serve_in_window(server, "u", "h", webview)
+    monkeypatch.setattr(cli, "wait_ready", lambda health, **kwargs: False)
+    # Exits non-zero (no silent "success") and still stops the server.
+    with pytest.raises(SystemExit) as exit_info:
+        cli.serve_in_window(server, "u", "h", webview)
+    assert exit_info.value.code == 1
     assert webview.windows == [] and server.stopped.is_set()
 
 
@@ -230,3 +233,55 @@ def test_load_webview_handles_broken_module(monkeypatch):
     monkeypatch.delitem(cli.sys.modules, "webview", raising=False)
     monkeypatch.setattr(builtins, "__import__", broken)
     assert cli.load_webview() is None
+
+
+def test_health_check_ignores_system_http_proxy(monkeypatch):
+    # Corporate machines often set HTTP_PROXY; 127.0.0.1 must not go through it.
+    import http.server
+    import threading
+
+    class Health(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Health)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("HTTP_PROXY", "http://10.255.255.1:3128")
+    monkeypatch.setenv("http_proxy", "http://10.255.255.1:3128")
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    monkeypatch.delenv("no_proxy", raising=False)
+    try:
+        assert cli.wait_ready(f"http://127.0.0.1:{server.server_port}/", timeout=5)
+    finally:
+        server.shutdown()
+
+
+def test_dead_server_thread_is_reported_immediately():
+    started = cli.time.monotonic()
+    assert not cli.wait_ready("http://127.0.0.1:9/health", timeout=20, alive=lambda: False)
+    assert cli.time.monotonic() - started < 2
+
+
+@pytest.mark.parametrize("value", ["70000", "-1", "abc"])
+def test_out_of_range_port_is_a_clean_usage_error(value):
+    with pytest.raises(SystemExit) as exit_info:
+        cli.build_parser().parse_args(["--port", value])
+    assert exit_info.value.code == 2
+
+
+@pytest.mark.parametrize("content_type,expected", [
+    ("application/json", 201),
+    ("application/json; charset=utf-8", 201),
+    ("text/plain; x=application/json", 415),
+    ("text/plain", 415),
+])
+def test_writes_require_json_media_type(monkeypatch, tmp_path, content_type, expected):
+    monkeypatch.setenv("OSINTBR_DB", str(tmp_path / "c.sqlite3"))
+    client = TestClient(create_app(), base_url="http://127.0.0.1:8000")
+    body = '{"title": "Tipo", "purpose": "Testar o tipo de conteúdo"}'
+    response = client.post("/api/brasil/cases", content=body, headers={"Content-Type": content_type})
+    assert response.status_code == expected

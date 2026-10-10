@@ -9,6 +9,7 @@ Stdlib only. Never overwrites an existing file and never prints secrets.
 
 import argparse
 import base64
+import os
 import re
 import secrets
 import sys
@@ -154,9 +155,11 @@ def main(argv=None):
         print("Informe --domain e --email válidos.", file=sys.stderr)
         return 1
     # O_EXCL: never clobber a file created between the check and the write.
-    with open(path, "x", encoding="utf-8") as handle:
+    # Created with mode 600 from the start: no window where secrets are world-readable.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
         handle.write(content)
-    path.chmod(0o600)
+    path.chmod(0o600)  # in case a umask stripped bits on exotic systems
     print(f"{path.name} criado com permissão 600. Nenhum segredo foi exibido.")
     print(NEXT_STEPS.format(domain=domain, path=path.name))
     return 0

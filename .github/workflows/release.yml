@@ -13,6 +13,10 @@ on:
       - 'flowsint-types/src/**'
       - 'flowsint-app/src/**'
       - '.github/workflows/release.yml'
+      - 'docs/manual/**'
+      - 'requirements-brasil.txt'
+      - 'package-lock.json'
+      - 'flowsint-app/package.json'
   workflow_dispatch:
 permissions:
   contents: read
@@ -66,6 +70,16 @@ jobs:
         run: |
           exe=packaging/desktop/dist/OsintbrFLOW/OsintbrFLOW
           [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          python packaging/desktop/smoke_test.py "$exe" 2>&1 | tee "$RUNNER_TEMP/etapa.log"
+      - name: Teste de fumaça do .zip publicado (extraído como o usuário faria)
+        run: |
+          zipfile=$(ls packaging/desktop/dist/*.zip)
+          out="$RUNNER_TEMP/zip-extraido"
+          rm -rf "$out" && mkdir -p "$out"
+          if [ "$RUNNER_OS" = Windows ]; then 7z x -bso0 -o"$out" "$zipfile"; else unzip -q "$zipfile" -d "$out"; fi
+          exe="$(ls -d "$out"/*/OsintbrFLOW)/OsintbrFLOW"
+          [ "$RUNNER_OS" = Windows ] && exe="$exe.exe"
+          ls "$out"/*/manual/index.html "$out"/*/COMECE-AQUI.md
           python packaging/desktop/smoke_test.py "$exe" 2>&1 | tee "$RUNNER_TEMP/etapa.log"
       - name: Resumo da falha (visível nas anotações)
         if: failure()

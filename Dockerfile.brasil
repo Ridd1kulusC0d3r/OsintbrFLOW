@@ -16,4 +16,5 @@ COPY --from=frontend /src/flowsint-app/dist ./flowsint-app/dist
 ENV PYTHONPATH=/app/flowsint-types/src:/app/flowsint-core/src OSINTBR_DB=/data/brasil.sqlite3
 USER analyst
 EXPOSE 8000
-CMD ["python","-m","uvicorn","osintbr.lab:app","--host","0.0.0.0","--port","8000"]
+# --no-proxy-headers: X-Forwarded-For can never turn a public peer into 127.0.0.1.
+CMD ["python","-m","uvicorn","osintbr.lab:app","--host","0.0.0.0","--port","8000","--no-proxy-headers"]

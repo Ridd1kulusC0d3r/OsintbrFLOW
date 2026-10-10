@@ -115,7 +115,7 @@ O Flowsint **não tem papel de administrador**: toda conta tem os mesmos poderes
    docker compose --env-file .env.prod -f compose.br.yml -f compose.prod.yml up -d
    ```
 
-5. Confirme que fechou: `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://osint.suaorg.com.br/api/auth/register -H 'Content-Type: application/json' -d '{"email":"teste@exemplo.com","password":"x"}'` deve mostrar **403**.
+5. Confirme que fechou: `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://osint.suaorg.com.br/api/auth/register -H 'Content-Type: application/json' -d '{}'` deve mostrar **403**. O corpo vazio é proposital: com o cadastro fechado a recusa vem antes de qualquer validação (403); se ainda estiver aberto, a API responde 422 e **nenhuma conta é criada**.
 
 Para incluir alguém depois, repita os passos 1, 4 e 5. Com o cadastro fechado, a tela `/register` continua aparecendo, mas o envio é recusado com a mensagem "Cadastro público desativado neste servidor".
 
@@ -216,8 +216,9 @@ Proteções existentes e seus limites:
 
 - `compose.lab.yml` publica a porta só em `127.0.0.1`.
 - O laboratório recusa nomes de host que não sejam `localhost`, `127.0.0.1` ou `::1` (defesa contra DNS rebinding).
-- **Novo nesta entrega:** no modo local, o laboratório recusa conexões vindas de **endereços IP públicos** (resposta 403), mesmo que o atacante envie `Host: localhost`. Isso cobre o erro de publicar a porta em `0.0.0.0` numa VPS.
-- **Não cobre:** acesso pela rede local (Wi-Fi do escritório, VPN), um proxy reverso na mesma máquina ou túneis. Nesses casos o laboratório vê um endereço privado e não tem como saber que a requisição veio de fora. Por isso a regra continua sendo: não exponha.
+- **Novo nesta entrega:** no modo local, o laboratório recusa conexões vindas de **endereços IP públicos** (resposta 403), mesmo que o atacante envie `Host: localhost`. Isso só funciona quando o endereço de origem chega intacto ao processo: **IPv4 com o encaminhamento padrão do Docker (DNAT/iptables)** ou execução direta no host.
+- **Não cobre IPv6 publicado pelo Docker:** com `ports: "8000:8000"`, o Docker também escuta em `[::]`; sem IPv6 na rede do container, o `docker-proxy` repassa a conexão a partir do gateway da bridge (172.x) e a origem real se perde. Um acesso externo por IPv6 passaria. Publique sempre como `127.0.0.1:8000:8000`, como em `compose.lab.yml`.
+- **Também não cobre:** acesso pela rede local (Wi-Fi do escritório, VPN), um proxy reverso na mesma máquina ou túneis. Nesses casos o laboratório vê um endereço privado e não tem como saber que a requisição veio de fora. Por isso a regra continua sendo: não exponha.
 
 O modo Colab é outra coisa: exige uma chave por sessão e só existe enquanto o notebook estiver aberto.
 
