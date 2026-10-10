@@ -51,7 +51,7 @@ def system():
 
 
 def version():
-    text = (ROOT / "flowsint-core" / "src" / "osintbr" / "__init__.py").read_text()
+    text = (ROOT / "flowsint-core" / "src" / "osintbr" / "__init__.py").read_text(encoding="utf-8")
     return text.split('__version__ = "', 1)[1].split('"', 1)[0]
 
 

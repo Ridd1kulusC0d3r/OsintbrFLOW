@@ -11,6 +11,6 @@ from osintbr.store import verify  # noqa: E402 - local source roots are set abov
 
 if len(sys.argv) != 2:
     raise SystemExit("Uso: python scripts/verify-bundle.py arquivo.json")
-result = verify(json.loads(Path(sys.argv[1]).read_text()))
+result = verify(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")))
 print(json.dumps(result, ensure_ascii=False, indent=2))
 raise SystemExit(0 if result["valid"] else 1)

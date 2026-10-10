@@ -73,7 +73,7 @@ def test_proxy_requires_token_on_reads_and_writes(monkeypatch):
 
 def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
     root = Path(__file__).resolve().parents[2]
-    notebook = json.loads((root / "notebooks/OsintbrFLOW_Colab.ipynb").read_text())
+    notebook = json.loads((root / "notebooks/OsintbrFLOW_Colab.ipynb").read_text(encoding="utf-8"))
     assert notebook["nbformat"] == 4
     code = []
     for cell in notebook["cells"]:
@@ -104,7 +104,7 @@ def test_notebook_is_valid_python_with_no_embedded_outputs_or_credentials():
 def test_proxy_host_is_not_an_authentication_credential(monkeypatch, tmp_path, upstream_host):
     frontend = tmp_path / "frontend"
     frontend.mkdir()
-    (frontend / "brasil.html").write_text("<html>OSINT Brasil Flow</html>")
+    (frontend / "brasil.html").write_text("<html>OSINT Brasil Flow</html>", encoding="utf-8")
     monkeypatch.setenv("OSINTBR_FRONTEND", str(frontend))
     client = proxy_client(monkeypatch)
     client.headers["Host"] = upstream_host

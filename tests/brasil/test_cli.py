@@ -48,7 +48,7 @@ def test_busy_port_falls_back_to_a_free_one():
 def frontend(tmp_path):
     folder = tmp_path / "static"
     folder.mkdir()
-    (folder / "brasil.html").write_text("<html>OSINT Brasil Flow</html>")
+    (folder / "brasil.html").write_text("<html>OSINT Brasil Flow</html>", encoding="utf-8")
     return folder
 
 

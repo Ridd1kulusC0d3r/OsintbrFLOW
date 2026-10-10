@@ -18,7 +18,7 @@ ARGS = ["--domain", "osint.exemplo.com.br", "--email", "ti@exemplo.com.br"]
 def test_generates_strong_private_file_without_printing_secrets(tmp_path, capsys):
     target = tmp_path / ".env.prod"
     assert init_prod.main(ARGS + ["--path", str(target)]) == 0
-    values = init_prod.parse_env(target.read_text())
+    values = init_prod.parse_env(target.read_text(encoding="utf-8"))
     assert init_prod.problems(values) == []
     assert values["FLOWSINT_ALLOW_REGISTRATION"] == "false"
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
@@ -31,16 +31,16 @@ def test_two_runs_produce_different_secrets(tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     init_prod.main(ARGS + ["--path", str(a)])
     init_prod.main(ARGS + ["--path", str(b)])
-    va, vb = init_prod.parse_env(a.read_text()), init_prod.parse_env(b.read_text())
+    va, vb = init_prod.parse_env(a.read_text(encoding="utf-8")), init_prod.parse_env(b.read_text(encoding="utf-8"))
     assert va["AUTH_SECRET"] != vb["AUTH_SECRET"]
 
 
 def test_never_overwrites_existing_file(tmp_path):
     target = tmp_path / ".env.prod"
-    target.write_text("AUTH_SECRET=superscretchangeitplz\n")
+    target.write_text("AUTH_SECRET=superscretchangeitplz\n", encoding="utf-8")
     target.chmod(0o600)
     assert init_prod.main(ARGS + ["--path", str(target)]) == 1  # audited, refused
-    assert target.read_text() == "AUTH_SECRET=superscretchangeitplz\n"
+    assert target.read_text(encoding="utf-8") == "AUTH_SECRET=superscretchangeitplz\n"
 
 
 @pytest.mark.parametrize("override,fragment", [
@@ -58,17 +58,17 @@ def test_check_refuses_weak_or_default_values(tmp_path, override, fragment):
     target = tmp_path / ".env.prod"
     init_prod.main(ARGS + ["--path", str(target)])
     key = override.split("=", 1)[0]
-    lines = [ln for ln in target.read_text().splitlines() if not ln.startswith(key + "=")]
-    target.write_text("\n".join(lines + [override]) + "\n")
+    lines = [ln for ln in target.read_text(encoding="utf-8").splitlines() if not ln.startswith(key + "=")]
+    target.write_text("\n".join(lines + [override]) + "\n", encoding="utf-8")
     assert init_prod.main(["--check", "--path", str(target)]) == 1
-    assert any(fragment in p for p in init_prod.problems(init_prod.parse_env(target.read_text())))
+    assert any(fragment in p for p in init_prod.problems(init_prod.parse_env(target.read_text(encoding="utf-8"))))
 
 
 def test_open_registration_is_a_warning_not_a_refusal(tmp_path, capsys):
     target = tmp_path / ".env.prod"
     init_prod.main(ARGS + ["--path", str(target)])
-    target.write_text(target.read_text().replace(
-        "FLOWSINT_ALLOW_REGISTRATION=false", "FLOWSINT_ALLOW_REGISTRATION=true"))
+    target.write_text(target.read_text(encoding="utf-8").replace(
+        "FLOWSINT_ALLOW_REGISTRATION=false", "FLOWSINT_ALLOW_REGISTRATION=true"), encoding="utf-8")
     assert init_prod.main(["--check", "--path", str(target)]) == 0
     assert "qualquer pessoa" in capsys.readouterr().out
 
@@ -80,7 +80,7 @@ def test_refuses_to_generate_without_valid_domain(tmp_path):
 
 
 def test_prod_override_publishes_only_caddy():
-    text = (ROOT / "compose.prod.yml").read_text()
+    text = (ROOT / "compose.prod.yml").read_text(encoding="utf-8")
     published = re.findall(r'^\s+- "(\d+):\d+(?:/udp)?"$', text, re.M)
     assert sorted(set(published)) == ["443", "80"]
     for service in ("postgres", "redis", "neo4j", "api", "app"):
@@ -91,7 +91,7 @@ def test_prod_override_publishes_only_caddy():
 
 
 def test_caddyfile_has_security_headers_and_body_limit():
-    text = (ROOT / "deploy/Caddyfile").read_text()
+    text = (ROOT / "deploy/Caddyfile").read_text(encoding="utf-8")
     for needle in ("Strict-Transport-Security", "X-Content-Type-Options \"nosniff\"",
                    "frame-ancestors 'none'", "X-Frame-Options \"DENY\"",
                    "Referrer-Policy", "max_size 10MB", "reverse_proxy app:8080"):
