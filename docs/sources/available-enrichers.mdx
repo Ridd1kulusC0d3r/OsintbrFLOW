@@ -130,6 +130,9 @@ Tools/Pivots: [sherlock](https://github.com/sherlock-project/sherlock) (CLI)
 **username_to_socials_maigret**: Enumerate social accounts for a username using Maigret and parse rich metadata.
 Tools/Pivots: [maigret](https://github.com/soxoj/maigret) (CLI)
 
+**username_to_impersonators**: Find lookalike usernames (homoglyphs, "support"/"official" baits, both combined, separators, typos) already registered on 12 platforms, discard platforms that answer "exists" for an impossible name (soft-404 baseline), and read display name and bio to flag CRITICAL impersonators. Brand-protection use (OSINT Brasil Flow).
+Tools/Pivots: SÓSIA (`tools/social/sosia.py`, stdlib only; platform rules from [sherlock](https://github.com/sherlock-project/sherlock) `data.json`). Standalone kit in `ferramentas/sosia`.
+
 **username_to_dehashed**: Get breach intelligence (credentials, related individuals) associated with a username.
 Tools/APIs: [DeHashed API](https://www.dehashed.com/docs)
 

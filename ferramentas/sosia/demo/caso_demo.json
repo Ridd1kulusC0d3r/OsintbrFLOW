@@ -1,0 +1,112 @@
+{
+ "$comment": "Caso de demonstração FICTÍCIO. 'bancoaurora' é uma marca inventada; perfis, nomes, bios e números abaixo são simulados para mostrar o SÓSIA funcionando sem internet.",
+ "original": "bancoaurora",
+ "registrados": {
+  "https://imginn.com/bancoaurora": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://www.youtube.com/@bancoaurora": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://www.tiktok.com/@bancoaurora": {
+   "status": 200,
+   "corpo": "{\"user\":{}}"
+  },
+  "https://www.github.com/bancoaurora": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://imginn.com/banc0aurora": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://imginn.com/bancoaurora_oficial": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://imginn.com/bancoaurora.suporte": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://t.me/bancoaurora_suporte": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Suporte Banco Aurora\"><meta property=\"og:description\" content=\"PIX bloqueado? Desbloqueio e estorno em minutos. Chame aqui.\"><title>Telegram: Contact @bancoaurora_suporte</title></head><body>perfil</body></html>"
+  },
+  "https://www.tiktok.com/@banco_aurora": {
+   "status": 200,
+   "corpo": "{\"user\":{}}"
+  },
+  "https://www.tiktok.com/@bancoaurora_br": {
+   "status": 200,
+   "corpo": "{\"user\":{}}"
+  },
+  "https://www.youtube.com/@bancoaurorasuporte": {
+   "status": 200,
+   "corpo": "<html>perfil</html>"
+  },
+  "https://www.twitch.tv/bancoaurora_sac": {
+   "status": 429,
+   "corpo": ""
+  }
+ },
+ "sites_que_mentem": {
+  "https://kick.com/api/v2/channels/": {
+   "status": 200,
+   "corpo": "{\"id\":1}"
+  }
+ },
+ "paginas_de_perfil": {
+  "https://instagram.com/bancoaurora": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora (@bancoaurora) • Instagram\"><meta property=\"og:description\" content=\"Conta digital sem tarifas. Atendimento só pelo app oficial.\"></head><body>perfil</body></html>"
+  },
+  "https://instagram.com/banc0aurora": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora (@banc0aurora) • Instagram\"><meta property=\"og:description\" content=\"Conta digital sem tarifas. Problemas com o app? Fale com nosso suporte: wa.me/5531900000000\"></head><body>perfil</body></html>"
+  },
+  "https://instagram.com/bancoaurora_oficial": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora Oficial\"><meta property=\"og:description\" content=\"Promoção de aniversário: resgate seu bônus pelo link na bio\"></head><body>perfil</body></html>"
+  },
+  "https://www.youtube.com/@bancoaurora": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora - YouTube\"><meta property=\"og:description\" content=\"Canal oficial do Banco Aurora.\"></head><body>perfil</body></html>"
+  },
+  "https://www.youtube.com/@bancoaurorasuporte": {
+   "status": 200,
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Bancoaurora Suporte - YouTube\"><meta property=\"og:description\" content=\"Tutoriais de fã sobre apps de banco. Não somos o banco.\"></head><body>perfil</body></html>"
+  },
+  "https://instagram.com/bancoaurora.suporte": {
+   "status": 200,
+   "corpo": "<html><head><title>Instagram</title></head><body>Entre para ver</body></html>"
+  }
+ },
+ "execucao_anterior": {
+  "gerado_em_utc": "2026-10-04 12:00:00",
+  "pasta": "(simulada no caso demo)",
+  "achados": [
+   [
+    "banc0aurora",
+    "Instagram"
+   ],
+   [
+    "bancoaurora.suporte",
+    "Instagram"
+   ],
+   [
+    "bancoaurora_br",
+    "TikTok"
+   ],
+   [
+    "banco_aurora",
+    "TikTok"
+   ],
+   [
+    "bancoaurora_ajuda",
+    "YouTube"
+   ]
+  ]
+ }
+}

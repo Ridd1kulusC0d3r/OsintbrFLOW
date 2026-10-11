@@ -38,8 +38,18 @@ Um fork funcional do Flowsint, baseado no commit `4c05849bc6ca5055ad187d056ef26e
 | Ponte com grafo nativo | Exporta JSON tipado; importador Flowsint preserva propriedades e referência de evidência |
 | Atlas brasileiro | 1.171 entradas: 3 conectores e 1.168 referências HTTPS deduplicadas do OSINT Brazuca |
 | Laboratório sintético | Caso fictício sem chamadas externas; nunca apresentado como resultado real |
+| Radar de perfis imitadores (SÓSIA) | Enriquecedor `username_to_impersonators` e ferramenta autônoma em [`ferramentas/sosia`](ferramentas/sosia/COMECE-AQUI.md): variantes de um username já registradas, risco CRÍTICO por nome de exibição/bio, comparação com a busca anterior |
 
 O atlas **não significa 1.171 integrações**. Fontes manuais estão rotuladas; sua disponibilidade não foi testada individualmente. Uma resposta 404, timeout ou falha de fonte nunca gera uma conclusão de inexistência.
+
+### SÓSIA — proteção de marca contra perfis imitadores
+
+Golpe de atendimento falso usa um nome **quase** igual ao da marca (`banc0aurora`, `bancoaurora_suporte`). O SÓSIA gera essas variantes (sete técnicas, incluindo homóglifo + "suporte"), verifica em 12 plataformas quais já estão registradas, descarta plataformas que respondem "existe" até para um nome impossível e lê nome de exibição e bio para marcar como **CRÍTICO** quem copia o original ou oferece suporte/PIX/WhatsApp.
+
+- **No editor de fluxos:** `Username` → `username_to_impersonators` → contas (`SocialAccount`) ligadas à variante, e a variante ligada ao original por `LOOKALIKE_OF`. Parâmetros: `max_variantes`, `risco_minimo`, `ler_perfil` e `modo` (`demo` roda o caso fictício `bancoaurora` sem internet). Risco, técnica e sinais ficam nas propriedades `sosia_*` do nó.
+- **Sem instalar o OsintbrFLOW:** [`ferramentas/sosia`](ferramentas/sosia/COMECE-AQUI.md) roda com dois cliques (Python 3.9+, só biblioteca padrão), gera relatório HTML, CSV e manifesto SHA-256 e mostra o que é **NOVO** ou **SUMIU** desde a busca anterior. Manual ilustrado em [`ferramentas/sosia/MANUAL.html`](ferramentas/sosia/MANUAL.html).
+
+Uso defensivo: o SÓSIA trabalha com usernames públicos e não resolve identidade de pessoas. Nome parecido não é golpe; CRÍTICO é indício a confirmar abrindo o perfil.
 
 ## Entradas aceitas
 
@@ -201,6 +211,8 @@ O teste de integração nativa em `tests/brasil/test_native.py` exige as depend�
 ## Referências e créditos
 
 - **Flowsint / Reconurge**: base de código preservada, Apache-2.0. [README original](docs/brasil/UPSTREAM-README.md), [LICENSE](LICENSE), [NOTICE](NOTICE).
+- **Sherlock Project**: lista de plataformas e regras de detecção do SÓSIA (subconjunto do `data.json`, MIT, [licença](ferramentas/sosia/LICENSE-sherlock-data.txt)).
+- **UsernameCrazy / SQUAD** ([arXiv 2401.09209](https://arxiv.org/abs/2401.09209)): referência para o empilhamento de técnicas de variantes do SÓSIA; código não copiado.
 - **OSINT Brazuca**: catálogo adaptado com deduplicação HTTPS, licença MIT preservada em [LICENSE-osint-brazuca.txt](docs/brasil/LICENSE-osint-brazuca.txt).
 - **SpiderFoot**: referência para processamento orientado a eventos e limites de propagação; código não copiado.
 - **OSIRIS**: referência para contexto espacial e apresentação da disponibilidade das fontes; código não copiado.

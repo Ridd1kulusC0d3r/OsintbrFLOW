@@ -210,3 +210,22 @@ DOMAIN=osint.exemplo.com.br ACME_EMAIL=ti@exemplo.com.br caddy validate --config
 **Suítes finais:** `tests/brasil` 117 passaram, 1 ignorado; `flowsint-api` 33 passaram. Linux: executável reconstruído, `.zip` extraído com `unzip` e aprovado no teste de fumaça com `HTTP_PROXY` apontando para um proxy inalcançável.
 
 **Ainda não verificado:** janela nativa aparecendo de fato (WebView2/WebKit); dois cliques e avisos SmartScreen/Gatekeeper em máquina real; sessão real do Colab; implantação real em VPS com certificado.
+
+## SÓSIA 1.1 — radar de perfis imitadores — 2026-10-11
+
+**Entrega:** enriquecedor `username_to_impersonators` (`flowsint-enrichers/src/flowsint_enrichers/social/to_impersonators.py`), biblioteca em `flowsint-enrichers/src/tools/social/` e ferramenta autônoma em `ferramentas/sosia/` (código, manual ilustrado, lançadores de dois cliques, caso demo, testes).
+
+**Tipos:** nenhum tipo novo. Entrada `Username`; saída `SocialAccount` (já tem `display_name`, `bio`, `platform`, `profile_url`). Risco, técnica e sinais vão em propriedades extras `sosia_*` (o tipo base aceita campos extras). Arestas: variante `LOOKALIKE_OF` original; variante `HAS_SOCIAL_ACCOUNT` conta, no mesmo padrão do enriquecedor Sherlock.
+
+**Uma fonte de verdade:** `tools/social/sosia.py`, `sites_padrao.json` e `demo/caso_demo.json` são cópias byte a byte de `ferramentas/sosia/`. `tests/brasil/test_sosia.py` falha se divergirem.
+
+| Suíte | Resultado (Python 3.12) |
+|---|---|
+| `tests/brasil` (CI, sem `test_native.py`) | 122 passaram (117 anteriores + 5 do SÓSIA) |
+| `flowsint-enrichers/tests` | 39 passaram (32 anteriores + 7 do enriquecedor) |
+| `ferramentas/sosia/tests` | 28 passaram em Python 3.9, 3.10, 3.11, 3.12, 3.13 e 3.14 |
+
+Os testes do enriquecedor cobrem registro, metadados, parâmetros, o caso demo completo (7 sósias, 3 CRÍTICOS, 14 arestas), o filtro `risco_minimo`, a execução sem leitura de perfil e a falha de rede sem derrubar o lote.
+
+**Não testado ao vivo:** a rede do ambiente de testes bloqueia as plataformas. A detecção e a leitura de perfil foram validadas com respostas simuladas no formato público (etiquetas `og:`). Quais plataformas mostram nome e bio sem login muda com frequência; o Instagram tende a aparecer como "não legível". O monitoramento NOVO/SUMIU existe só na ferramenta autônoma: no editor, o histórico é o próprio sketch.
+
