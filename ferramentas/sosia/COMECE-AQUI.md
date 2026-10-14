@@ -18,6 +18,7 @@ O caso demo funciona **sem internet** (marca fictícia `bancoaurora`: 7 sósias 
 | Arquivo | Para que serve |
 |---|---|
 | `MANUAL.html` | Manual ilustrado completo (instalação por sistema, telas anotadas, problemas, glossário) |
+| `GUIA-INTERATIVO.html` | O caso Banco Aurora: aprenda a ferramenta em 6 capítulos interativos, com fluxos e diagramas de uso |
 | `sosia.py` | A ferramenta (um arquivo só) |
 | `sites_padrao.json` | 12 plataformas, no formato do `data.json` do Sherlock |
 | `Iniciar-SOSIA.bat` / `.command` / `iniciar-sosia.sh` | Lançadores de dois cliques |

@@ -14,6 +14,6 @@ python sosia.py --help            # todas as opções
 - Lê o `data.json` do [Sherlock](https://github.com/sherlock-project/sherlock) sem modificação (`--sites data.json`)
 - Saídas: `relatorio.html`, `achados.csv`, `mudancas.csv`, `variantes.txt`, JSON e `manifesto.txt` com SHA-256
 - `--sem-perfil` para não abrir os perfis; monitoramento automático usando a mesma pasta `--saida`
-- Comece por `COMECE-AQUI.md`; manual completo em `MANUAL.html`
+- Comece por `COMECE-AQUI.md`; manual completo em `MANUAL.html`; guia interativo (o caso Banco Aurora) em `GUIA-INTERATIVO.html`
 
 Licença MIT. Lista de sites: subconjunto do Sherlock Project (MIT), ver `LICENSE-sherlock-data.txt`.
