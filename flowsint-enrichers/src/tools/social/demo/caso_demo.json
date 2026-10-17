@@ -32,7 +32,7 @@
   },
   "https://t.me/bancoaurora_suporte": {
    "status": 200,
-   "corpo": "<html><head><meta property=\"og:title\" content=\"Suporte Banco Aurora\"><meta property=\"og:description\" content=\"PIX bloqueado? Desbloqueio e estorno em minutos. Chame aqui.\"><title>Telegram: Contact @bancoaurora_suporte</title></head><body>perfil</body></html>"
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Suporte Banco Aurora\"><meta property=\"og:description\" content=\"PIX bloqueado? Desbloqueio e estorno em minutos. Chame no WhatsApp (31) 90000-0000.\"><title>Telegram: Contact @bancoaurora_suporte</title></head><body>perfil</body></html>"
   },
   "https://www.tiktok.com/@banco_aurora": {
    "status": 200,
@@ -68,7 +68,7 @@
   },
   "https://instagram.com/bancoaurora_oficial": {
    "status": 200,
-   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora Oficial\"><meta property=\"og:description\" content=\"Promoção de aniversário: resgate seu bônus pelo link na bio\"></head><body>perfil</body></html>"
+   "corpo": "<html><head><meta property=\"og:title\" content=\"Banco Aurora Oficial\"><meta property=\"og:description\" content=\"Promoção de aniversário: resgate seu bônus em aurora-bonus.site\"></head><body>perfil</body></html>"
   },
   "https://www.youtube.com/@bancoaurora": {
    "status": 200,

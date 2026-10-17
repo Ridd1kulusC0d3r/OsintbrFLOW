@@ -271,6 +271,15 @@ help:
 	@echo "  make clean        - Remove all Docker data"
 	@echo "  make install      - Install dependencies locally"
 	@echo "  make test         - Run tests"
+	@echo "  make sosia-demo   - SÓSIA: caso demo sem internet (relatório em ferramentas/sosia/resultados)"
+	@echo "  make sosia-test   - SÓSIA: testes da ferramenta autônoma"
+
+.PHONY: sosia-demo sosia-test
+sosia-demo:
+	cd ferramentas/sosia && python3 sosia.py --demo --sem-abrir
+
+sosia-test:
+	cd ferramentas/sosia && python3 -I -W error::ResourceWarning -m unittest discover -s tests -v
 
 .PHONY: brasil-lab
 brasil-lab:

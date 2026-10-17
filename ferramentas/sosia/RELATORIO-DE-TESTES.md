@@ -1,18 +1,18 @@
-# RELATÓRIO DE TESTES — SÓSIA 1.1.0
+# RELATÓRIO DE TESTES — SÓSIA 1.2.0
 
-Data: 2026-10-11 12:36 UTC  
-Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v114-x86_64-with-glibc2.39`
+Data: 2026-10-17 11:03 UTC  
+Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v139-x86_64-with-glibc2.39`
 
 ## Matriz de versões do Python
 
 | Versão | Testes | Resultado | Tempo |
 |---|---|---|---|
-| Python 3.9.25 | 28 | **PASSOU** | 0.123 s |
-| Python 3.10.20 | 28 | **PASSOU** | 0.130 s |
-| Python 3.11.17 | 28 | **PASSOU** | 0.131 s |
-| Python 3.12.3 | 28 | **PASSOU** | 0.119 s |
-| Python 3.13.16 | 28 | **PASSOU** | 0.115 s |
-| Python 3.14.6 | 28 | **PASSOU** | 0.127 s |
+| Python 3.9.25 | 36 | **PASSOU** | 0.198 s |
+| Python 3.10.20 | 36 | **PASSOU** | 0.228 s |
+| Python 3.11.17 | 36 | **PASSOU** | 0.248 s |
+| Python 3.12.3 | 36 | **PASSOU** | 0.242 s |
+| Python 3.13.16 | 36 | **PASSOU** | 0.246 s |
+| Python 3.14.6 | 36 | **PASSOU** | 0.201 s |
 
 Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 
@@ -27,6 +27,9 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 | `test_varredura_e_achados` | Varredura encontra o sósia registrado e classifica o risco | ok |
 | `test_combinada_entra_no_padrao_e_e_alto` | Combinadas entram nas 60 variantes padrão com risco ALTO | ok |
 | `test_homoglifo_mais_isca` | Técnica combinada: homóglifo + isca (banc0aurora_suporte) | ok |
+| `test_demo_gera_pivo_evidencias_denuncia_e_stix` | Caso demo: 1 pivô, 7 evidências com hash conferido no manifesto, denúncia com canais oficiais | ok |
+| `test_prova_da_leitura` | Toda página lida gera prova: status, hora UTC e SHA-256; falha de rede não gera prova | ok |
+| `test_stix_bem_formado_e_deterministico` | STIX 2.1 sem referência quebrada e com o mesmo ID para a mesma conta em buscas diferentes | ok |
 | `test_acha_execucao_anterior_na_pasta` | Acha a última busca completa da mesma marca, ignorando 'só gerar' e outras marcas | ok |
 | `test_duas_execucoes_reais_pela_linha_de_comando` | Duas buscas seguidas pela linha de comando: pastas separadas e 0 novos na segunda | ok |
 | `test_sem_anterior` | Primeira execução: nada marcado como novo | ok |
@@ -36,6 +39,11 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 | `test_extrai_nome_e_bio_nas_duas_ordens` | Lê nome e bio das etiquetas og:, em qualquer ordem de atributos, e limpa '(@usuario) • Instagram' | ok |
 | `test_pagina_de_login_nao_conta_como_perfil` | Página de login ('Instagram') e erro 404 não contam como perfil legível | ok |
 | `test_titulo_quando_nao_ha_og` | Sem etiquetas og:, usa o título da página | ok |
+| `test_contato_compartilhado_liga_e_contamina` | Contato repetido liga dois sósias, e quem divide contato com um CRÍTICO vira CRÍTICO | ok |
+| `test_contato_oficial_nao_conta` | Contato publicado pelo próprio perfil oficial não liga ninguém | ok |
+| `test_ignora_plataformas_cpf_e_texto_comum` | Não extrai links das próprias plataformas, CPF (LGPD) nem números comuns do texto | ok |
+| `test_outros_tipos` | Extrai chave PIX aleatória, e-mail, Telegram, CNPJ, encurtador (com caminho) e site (só domínio) | ok |
+| `test_whatsapp_e_telefone_viram_o_mesmo_numero` | wa.me, (31) 90000-0000 e +55 31 9 0000-0000 viram o mesmo número normalizado | ok |
 | `test_cli_demo` | Linha de comando --demo roda do início ao fim e gera a pasta de resultados | ok |
 | `test_demo_ponta_a_ponta` | Caso demo completo: 7 sósias, 3 CRÍTICOS, Kick descartado, 3 novos e 1 sumido, hashes conferem | ok |
 | `test_html_escapa` | Relatório HTML neutraliza código malicioso vindo de nomes | ok |
@@ -54,8 +62,8 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 `python sosia.py --demo --sem-abrir` → **PASSOU**
 
 ```
-Sósias registrados: 7 (CRÍTICO: 3, ALTO: 3)
-Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261011-123702/relatorio.html
+Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261017-110325/relatorio.html
+Kit de denúncia: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261017-110325/denuncia.md
 ```
 
 ## O que NÃO foi testado aqui (faça na sua máquina)

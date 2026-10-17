@@ -6,19 +6,25 @@ plataformas estão registradas, descarta plataformas que respondem "existe"
 até para um nome impossível (soft-404) e lê nome de exibição e bio dos
 perfis encontrados para marcar como CRÍTICO quem imita o original.
 
+Desde a 1.2, telefones/WhatsApp e e-mails publicados nas bios viram nós
+``Phone`` e ``Email`` ligados à conta (``PUBLISHES_CONTACT``): quando dois
+sósias publicam o mesmo número, o grafo mostra os dois presos ao mesmo nó,
+que é o pivô da operação. Cada conta carrega também a prova da leitura
+(SHA-256 da página e hora da coleta, em UTC).
+
 A biblioteca é a mesma da ferramenta autônoma em ``ferramentas/sosia``
 (cópia idêntica em ``tools/social/sosia.py``, conferida pelos testes).
 """
 
 import asyncio
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 from tools.social import sosia
 
 from flowsint_core.core.enricher_base import Enricher
 from flowsint_core.core.logger import Logger
 from flowsint_enrichers.registry import flowsint_enricher
-from flowsint_types import SocialAccount, Username
+from flowsint_types import Email, Phone, SocialAccount, Username
 
 NIVEIS = ["CRÍTICO", "ALTO", "MÉDIO", "BAIXO"]
 
@@ -105,6 +111,7 @@ class UsernameToImpersonatorsEnricher(Enricher):
         demo = self.params.get("modo") == "demo"
         minimo = NIVEIS.index(self.params.get("risco_minimo") or "MÉDIO")
         self.pares: List[Tuple[Username, Username, SocialAccount]] = []
+        self.contatos: List[Tuple[SocialAccount, Union[Phone, Email]]] = []
 
         for original in data:
             try:
@@ -138,8 +145,20 @@ class UsernameToImpersonatorsEnricher(Enricher):
                     sosia_tecnica=sosia.TECNICAS[a["tecnica"]][1],
                     sosia_sinais="; ".join(a.get("sinais", [])) or None,
                     sosia_perfil_legivel=bool(a.get("perfil_legivel")),
+                    sosia_contatos="; ".join(c["valor"] for c in a.get("contatos", []))
+                    or None,
+                    sosia_evidencia_sha256=(a.get("prova") or {}).get("sha256"),
+                    sosia_coletado_em_utc=(a.get("prova") or {}).get("coletado_em_utc"),
                 )
                 self.pares.append((original, variante, conta))
+                for c in a.get("contatos", []):
+                    try:
+                        if c["tipo"] == "telefone":
+                            self.contatos.append((conta, Phone(number=c["valor"])))
+                        elif c["tipo"] == "email":
+                            self.contatos.append((conta, Email(email=c["valor"])))
+                    except ValueError:
+                        continue  # número/e-mail que o tipo do Flowsint não aceita: fica só na propriedade
             Logger.info(
                 self.sketch_id,
                 {
@@ -170,6 +189,18 @@ class UsernameToImpersonatorsEnricher(Enricher):
                     {
                         "message": f"[SÓSIA] Falha ao gravar {variante.value} em {conta.platform}: {e}"
                     },
+                )
+        for conta, contato in getattr(self, "contatos", []):
+            try:
+                self.create_node(contato)
+                self.create_relationship(conta, contato, "PUBLISHES_CONTACT")
+                self.log_graph_message(
+                    f"{conta.username.value} ({conta.platform}) publica {contato.nodeLabel}"
+                )
+            except Exception as e:
+                Logger.error(
+                    self.sketch_id,
+                    {"message": f"[SÓSIA] Falha ao gravar contato de {conta.id}: {e}"},
                 )
         return results
 

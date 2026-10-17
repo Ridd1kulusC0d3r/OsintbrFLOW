@@ -80,6 +80,25 @@ async def test_demo_encontra_criticos_e_monta_grafo():
 
 
 @pytest.mark.asyncio
+async def test_contato_compartilhado_vira_pivo_no_grafo():
+    """O mesmo WhatsApp em dois sósias (Instagram e Telegram) liga as duas contas a um só Phone."""
+    saida, grafo = await _rodar({"modo": "demo", "risco_minimo": "BAIXO"})
+    ligacoes = [
+        (c.kwargs["from_obj"].id, c.kwargs["to_obj"].number)
+        for c in grafo.create_relationship.call_args_list
+        if c.kwargs["rel_label"] == "PUBLISHES_CONTACT"
+    ]
+    assert sorted(ligacoes) == [
+        ("banc0aurora@Instagram", "+5531900000000"),
+        ("bancoaurora_suporte@Telegram", "+5531900000000"),
+    ]
+    insta = next(c for c in saida if c.username.value == "banc0aurora")
+    assert insta.sosia_contatos == "+5531900000000"
+    assert "mesmo telefone/WhatsApp de outro sósia" in insta.sosia_sinais
+    assert len(insta.sosia_evidencia_sha256) == 64 and insta.sosia_coletado_em_utc
+
+
+@pytest.mark.asyncio
 async def test_risco_minimo_filtra():
     saida, _ = await _rodar({"modo": "demo", "risco_minimo": "CRÍTICO"})
     assert {c.sosia_risco for c in saida} == {"CRÍTICO"}

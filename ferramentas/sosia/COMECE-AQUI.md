@@ -1,6 +1,6 @@
 # COMECE AQUI — SÓSIA
 
-Gera nomes **quase iguais** ao de uma marca ou pessoa (`banc0aurora`, `bancoaurora_suporte`, `banc0aurora_oficial`…), verifica em quais plataformas eles **já estão registrados**, lê o nome de exibição e a bio de cada um para marcar como **CRÍTICO** quem imita o original de fato, e mostra o que é **NOVO** ou **SUMIU** desde a última busca. Uso defensivo: proteção de marca e de pessoas expostas contra perfis imitadores usados em golpes.
+Gera nomes **quase iguais** ao de uma marca ou pessoa (`banc0aurora`, `bancoaurora_suporte`, `banc0aurora_oficial`…), verifica em quais plataformas eles **já estão registrados**, lê o nome de exibição e a bio de cada um para marcar como **CRÍTICO** quem imita o original de fato, **liga os perfis que publicam o mesmo WhatsApp, PIX ou link**, guarda as páginas como evidência, prepara a **denúncia** e mostra o que é **NOVO** ou **SUMIU** desde a última busca. Uso defensivo: proteção de marca e de pessoas expostas contra perfis imitadores usados em golpes.
 
 ## Em 3 passos
 
@@ -11,7 +11,7 @@ Gera nomes **quase iguais** ao de uma marca ou pessoa (`banc0aurora`, `bancoauro
    - Linux: `iniciar-sosia.sh`
 3. **Digite `DEMO`** e aperte Enter. O relatório abre sozinho no navegador.
 
-O caso demo funciona **sem internet** (marca fictícia `bancoaurora`: 7 sósias em 4 plataformas, 3 CRÍTICOS, 3 novos e 1 sumido desde uma busca anterior simulada, uma plataforma descartada por mentir (soft-404)). Depois, rode de novo com um nome real. Tempo típico: 3 a 5 minutos (60 variantes × 12 plataformas + leitura dos perfis encontrados).
+O caso demo funciona **sem internet** (marca fictícia `bancoaurora`: 7 sósias em 4 plataformas, 3 CRÍTICOS, o mesmo WhatsApp ligando um perfil do Instagram a um do Telegram, 3 novos e 1 sumido desde uma busca anterior simulada, e uma plataforma descartada por mentir (soft-404)). Depois, rode de novo com um nome real. Tempo típico: 3 a 5 minutos (60 variantes × 12 plataformas + leitura dos perfis encontrados).
 
 ## O que tem nesta pasta
 
@@ -24,9 +24,16 @@ O caso demo funciona **sem internet** (marca fictícia `bancoaurora`: 7 sósias 
 | `Iniciar-SOSIA.bat` / `.command` / `iniciar-sosia.sh` | Lançadores de dois cliques |
 | `demo/caso_demo.json` | Caso de demonstração fictício |
 | `tests/` | Testes automáticos (`python -m unittest discover -s tests -v`) |
+| `README.md` / `CHANGELOG.md` | Visão geral com imagens e diagramas / o que mudou em cada versão |
 | `RELATORIO-DE-TESTES.md` | Resultado dos testes em nuvem, Python 3.9 a 3.14 |
 | `resultados/` | Criada na primeira busca; uma subpasta por busca. **Mantenha-a**: é com ela que o SÓSIA compara a próxima busca |
 
-> **Novidades da 1.1:** técnica combinada (homóglifo + "suporte"), leitura de nome de exibição e bio com nível CRÍTICO, e monitoramento automático (NOVO / SUMIU, `mudancas.csv`).
+## Depois da busca: o que abrir, nesta ordem
+
+1. `relatorio.html`: comece pelos **CRÍTICOS**, depois os **NOVOS** e a seção **Pivôs**.
+2. `denuncia.md`: o canal oficial de cada plataforma, os sinais e um texto pronto. Confirme o perfil antes de enviar.
+3. `manifesto.txt`: anexe à denúncia. Os SHA-256 provam que as evidências em `evidencias/` não mudaram.
+
+> **Novidades da 1.2:** pivôs de contato (`contatos.csv`), evidências com SHA-256 (`evidencias/`), kit de denúncia (`denuncia.md`) e exportação STIX 2.1 (`achados.stix.json`) para OpenCTI e MISP. Veja o `CHANGELOG.md`.
 
 > **Atenção:** Nome parecido não é golpe, e CRÍTICO é indício forte, não prova. Abra cada perfil antes de concluir e use os canais oficiais de denúncia.

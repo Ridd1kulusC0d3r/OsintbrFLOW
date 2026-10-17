@@ -189,3 +189,6 @@ data/
 # Segredos de produção gerados por scripts/init-prod.py
 .env.*
 !.env.example
+
+# Resultados das ferramentas autônomas (uma pasta por busca)
+ferramentas/*/resultados/

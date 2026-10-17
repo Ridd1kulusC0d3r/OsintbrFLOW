@@ -190,7 +190,8 @@ class TestPerfil(unittest.TestCase):
 
     def test_pagina_de_login_nao_conta_como_perfil(self):
         site = {"url": "https://www.instagram.com/{}"}
-        rede = lambda *a: (200, "<title>Instagram</title>")
+        def rede(*a):
+            return (200, "<title>Instagram</title>")
         self.assertIsNone(sosia.ler_perfil(site, "x", rede, "Instagram"))
         self.assertIsNone(sosia.ler_perfil(site, "x", lambda *a: (404, ""), "Instagram"))
 
@@ -260,3 +261,128 @@ class TestMonitoramento(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestPivos(unittest.TestCase):
+    """1.2: contatos publicados nas bios ligam perfis da mesma operação."""
+
+    def tipos(self, texto):
+        return {(c["tipo"], c["valor"]) for c in sosia.extrair_contatos(texto)}
+
+    def test_whatsapp_e_telefone_viram_o_mesmo_numero(self):
+        self.assertEqual(self.tipos("fale: wa.me/5531900000000"), {("telefone", "+5531900000000")})
+        self.assertEqual(self.tipos("Chame no (31) 90000-0000."), {("telefone", "+5531900000000")})
+        self.assertEqual(self.tipos("+55 31 9 0000-0000"), {("telefone", "+5531900000000")})
+        self.assertEqual(self.tipos("api.whatsapp.com/send?phone=5511988887777"), {("telefone", "+5511988887777")})
+
+    def test_outros_tipos(self):
+        t = self.tipos("PIX 123e4567-e89b-12d3-a456-426614174000 · sac@aurora-ajuda.com · t.me/AuroraSAC · "
+                       "CNPJ 12.345.678/0001-90 · bit.ly/aurora7 · https://aurora-bonus.site/resgate")
+        self.assertIn(("pix", "123e4567-e89b-12d3-a456-426614174000"), t)
+        self.assertIn(("email", "sac@aurora-ajuda.com"), t)
+        self.assertIn(("telegram", "@aurorasac"), t)
+        self.assertIn(("cnpj", "12.345.678/0001-90"), t)
+        self.assertIn(("link", "bit.ly/aurora7"), t)  # encurtador: o caminho identifica
+        self.assertIn(("link", "aurora-bonus.site"), t)  # site: o domínio identifica
+        self.assertNotIn(("link", "aurora-ajuda.com"), t)  # domínio de e-mail não vira link
+
+    def test_ignora_plataformas_cpf_e_texto_comum(self):
+        self.assertEqual(self.tipos("veja instagram.com/x e youtube.com/@x · CPF 123.456.789-09 · "
+                                    "ligue já, 100% seguro, ano 2026"), set())
+
+    def achado(self, variante, site, risco, bio):
+        return {"variante": variante, "site": site, "risco": risco, "peso": 1.1 if risco == "CRÍTICO" else 0.95,
+                "sinais": [], "contatos": sosia.extrair_contatos(bio)}
+
+    def test_contato_compartilhado_liga_e_contamina(self):
+        a = self.achado("banc0aurora", "Instagram", "CRÍTICO", "wa.me/5531900000000")
+        b = self.achado("aurora.sac", "TikTok", "ALTO", "WhatsApp (31) 90000-0000")
+        c = self.achado("bancoaurora_br", "YouTube", "ALTO", "sem contato")
+        pivos = sosia.ligar_contatos([a, b, c])
+        self.assertEqual(len(pivos), 1)
+        self.assertEqual(pivos[0]["valor"], "+5531900000000")
+        self.assertEqual(b["risco"], "CRÍTICO")
+        self.assertIn("divide contato com um perfil CRÍTICO (mesma operação)", b["sinais"])
+        self.assertEqual(c["risco"], "ALTO")
+        self.assertTrue(any("de outro sósia" in s for s in a["sinais"]))
+
+    def test_contato_oficial_nao_conta(self):
+        a = self.achado("a1", "Instagram", "CRÍTICO", "sac@aurora.com")
+        b = self.achado("a2", "TikTok", "ALTO", "sac@aurora.com")
+        pivos = sosia.ligar_contatos([a, b], oficiais=sosia.extrair_contatos("Atendimento: sac@aurora.com"))
+        self.assertEqual(pivos, [])
+        self.assertEqual(b["risco"], "ALTO")
+        self.assertEqual(a["contatos"], [])
+
+
+class TestEvidenciaDenunciaStix(unittest.TestCase):
+    """1.2: página lida vira evidência com SHA-256; denúncia e STIX saem da mesma busca."""
+
+    def rodar_demo(self, tmp):
+        sites = sosia.carregar_sites()
+        original, rede, anterior = sosia.rede_demo(sites)
+        lista = sosia.variantes(original, 60)
+        varredura = sosia.varrer(original, lista, sites, rede, 0, 4, lambda *a: None)
+        achados = sosia.achados_de(original, lista, varredura)
+        achados = sosia.analisar_perfis(original, achados, sites, varredura, rede, 0, lambda *a: None)
+        return sosia.salvar(original, lista, varredura, tmp, "teste", achados,
+                            sosia.comparar(anterior, achados, varredura))
+
+    def test_prova_da_leitura(self):
+        perfil, prova = sosia.ler_pagina(SITE, "ana", lambda *a: (200, '<meta property="og:title" content="Ana">'))
+        self.assertEqual(perfil["nome"], "Ana")
+        self.assertEqual(prova["status"], 200)
+        self.assertEqual(len(prova["sha256"]), 64)
+        self.assertEqual(sosia.ler_pagina(SITE, "ana", lambda *a: (None, "x")), (None, None))
+
+    def test_demo_gera_pivo_evidencias_denuncia_e_stix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta, relatorio, achados = self.rodar_demo(tmp)
+            dados = json.loads(ler(os.path.join(pasta, "dados.json")))
+            self.assertEqual([(p["tipo"], p["valor"]) for p in dados["pivos"]], [("telefone", "+5531900000000")])
+            self.assertNotIn("_corpo", json.dumps(dados))
+            # cada evidência no disco tem o mesmo hash registrado na prova e no manifesto
+            manifesto = ler(os.path.join(pasta, "manifesto.txt"))
+            provas = [a["prova"] for a in achados if a.get("prova", {}) and a["prova"].get("arquivo")]
+            self.assertEqual(len(provas), 7)
+            for p in provas:
+                caminho = os.path.join(pasta, *p["arquivo"].split("/"))
+                self.assertTrue(p["arquivo"].endswith(".html.txt"))
+                self.assertEqual(sosia.sha256(caminho), p["sha256"])
+                self.assertIn(p["sha256"] + "  " + p["arquivo"], manifesto)
+            for nome in ("contatos.csv", "denuncia.md", "achados.stix.json"):
+                self.assertIn(sosia.sha256(os.path.join(pasta, nome)), manifesto)
+            self.assertIn("+5531900000000,2,CRÍTICO,banc0aurora", ler(os.path.join(pasta, "contatos.csv")))
+            denuncia = ler(os.path.join(pasta, "denuncia.md"))
+            self.assertIn("https://help.instagram.com/contact/636276399721841", denuncia)
+            self.assertIn("@notoscam", denuncia)
+            self.assertIn("exibe o mesmo nome do perfil oficial", denuncia)
+            self.assertNotIn("@github", denuncia.lower())  # só plataformas com CRÍTICO/ALTO
+            self.assertIn("Pivôs: o mesmo contato", ler(relatorio))
+
+    def test_stix_bem_formado_e_deterministico(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pasta, _, _ = self.rodar_demo(tmp)
+            b1 = json.loads(ler(os.path.join(pasta, "achados.stix.json")))
+            pasta2, _, _ = self.rodar_demo(tmp)
+            b2 = json.loads(ler(os.path.join(pasta2, "achados.stix.json")))
+        tipos = [o["type"] for o in b1["objects"]]
+        self.assertEqual(b1["type"], "bundle")
+        self.assertEqual(tipos.count("user-account"), 7)
+        self.assertEqual(tipos.count("relationship"), 7)
+        self.assertEqual(tipos.count("grouping"), 1)
+        ids = {o["id"] for o in b1["objects"]}
+        self.assertEqual(len(ids), len(b1["objects"]))
+        for o in b1["objects"]:
+            for ref in o.get("object_refs", []) + [o.get("source_ref"), o.get("target_ref"), o.get("created_by_ref")]:
+                if ref:
+                    self.assertIn(ref, ids)  # nenhuma referência quebrada
+            if o["type"] != "user-account" and o["type"] != "bundle":
+                self.assertEqual(o["spec_version"], "2.1")
+        # a mesma conta tem o mesmo ID em buscas diferentes (deduplica no OpenCTI/MISP)
+        def contas(b):
+            return {o["id"] for o in b["objects"] if o["type"] == "user-account"}
+        self.assertEqual(contas(b1), contas(b2))
+        # valor conferido com a biblioteca oficial stix2 (UserAccount(account_login='banc0aurora', account_type='instagram'))
+        self.assertIn(sosia._sco_id("user-account", {"account_login": "banc0aurora", "account_type": "instagram"}),
+                      contas(b1))

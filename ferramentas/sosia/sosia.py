@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SÓSIA 1.1 — radar de perfis imitadores
+SÓSIA 1.2 — radar de perfis imitadores
 ======================================
 
 Sherlock, Maigret e similares procuram o username EXATO.
@@ -12,7 +12,9 @@ O SÓSIA gera essas variantes (letras trocadas por números parecidos,
 sufixos de "suporte"/"oficial", as duas coisas juntas, pontos e sublinhados,
 erros de digitação), verifica em quais plataformas elas já estão registradas,
 lê o nome de exibição e a bio de cada perfil encontrado para ver se ele copia
-o original ou oferece "suporte"/PIX, e mostra o que mudou desde a última busca.
+o original ou oferece "suporte"/PIX, liga perfis que publicam o mesmo WhatsApp,
+PIX ou link (mesma operação), guarda as páginas como evidência com SHA-256,
+prepara a denúncia e mostra o que mudou desde a última busca.
 
 Uso defensivo: proteção de marca, de executivos (VIP) e de perfis
 institucionais contra imitação usada em phishing e golpes de suporte falso.
@@ -26,6 +28,15 @@ Uso rápido
     python sosia.py bancoaurora --so-gerar # só gera a lista, sem acessar nada
     python sosia.py --demo                 # caso de demonstração, sem internet
     python sosia.py marca --sites data.json --max 80   # data.json do Sherlock
+
+O que sai em cada busca (pasta resultados/)
+--------------------------------------------
+    relatorio.html     abra este primeiro
+    denuncia.md        rascunho de denúncia por plataforma (canal oficial + texto + evidência)
+    achados.csv        sósias encontrados        contatos.csv   WhatsApp, PIX, e-mail, links das bios
+    mudancas.csv       NOVO / SUMIU              evidencias/    páginas lidas, como chegaram (.txt)
+    achados.stix.json  STIX 2.1 para OpenCTI/MISP
+    manifesto.txt      SHA-256 de tudo
 
 Outras opções
 -------------
@@ -46,15 +57,16 @@ import random
 import re
 import string
 import sys
-import unicodedata
 import time
+import unicodedata
 import urllib.error
 import urllib.request
+import uuid
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-VERSAO = "1.1.0"
+VERSAO = "1.2.0"
 PASTA = os.path.dirname(os.path.abspath(__file__))
 UA = f"Mozilla/5.0 (compatible; SOSIA/{VERSAO}; +brand protection)"
 
@@ -311,18 +323,131 @@ def extrair_perfil(corpo):
     return {"nome": nome[:120], "bio": re.sub(r"\s+", " ", bio)[:300]}
 
 
-def ler_perfil(site, usuario, rede=baixar, nome_site=""):
-    """Abre a página pública do perfil. None se não deu para ler (login, bloqueio, sem etiquetas)."""
-    status, corpo = rede(site["url"].replace("{}", usuario), site.get("headers"), True)
+def agora_utc():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def ler_pagina(site, usuario, rede=baixar, nome_site=""):
+    """
+    Abre a página pública do perfil. Devolve (perfil, prova).
+    perfil = {"nome", "bio"} ou None (login, bloqueio, sem etiquetas).
+    prova = {"url", "status", "coletado_em_utc", "sha256", "corpo"} da resposta recebida (ou None se a rede falhou):
+    é a evidência que vai para a pasta evidencias/ com o hash no manifesto.
+    """
+    url = site["url"].replace("{}", usuario)
+    status, corpo = rede(url, site.get("headers"), True)
+    prova = None
+    if status is not None:
+        prova = {"url": url, "status": status, "coletado_em_utc": agora_utc(),
+                 "sha256": hashlib.sha256((corpo or "").encode("utf-8")).hexdigest(), "corpo": corpo or ""}
     if status != 200:
-        return None
+        return None, prova
     perfil = extrair_perfil(corpo)
     # página de login costuma ter só o nome da plataforma como título
     dominio = re.search(r"//(?:www\.)?([^./{]+)", site["url"])
     genericos = {normalizar(nome_site), dominio.group(1).lower() if dominio else "", "login", "entrar", "signin"}
     if normalizar(perfil["nome"]) in genericos:
         perfil["nome"] = ""
-    return perfil if (perfil["nome"] or perfil["bio"]) else None
+    return (perfil if (perfil["nome"] or perfil["bio"]) else None), prova
+
+
+def ler_perfil(site, usuario, rede=baixar, nome_site=""):
+    """Abre a página pública do perfil. None se não deu para ler (login, bloqueio, sem etiquetas)."""
+    return ler_pagina(site, usuario, rede, nome_site)[0]
+
+
+# ---------------------------------------------------------------------------
+# 3b. Pivôs: contatos publicados nas bios (WhatsApp, telefone, e-mail, PIX, Telegram, links)
+# ---------------------------------------------------------------------------
+# Golpe de atendimento falso precisa levar a vítima para um canal do golpista. Esse canal
+# (o número do WhatsApp, a chave PIX, o link) costuma ser o mesmo em vários perfis sósias,
+# em plataformas diferentes: é a "impressão digital" da operação. CPF não é extraído (LGPD).
+
+_RE_WA = re.compile(r"(?:wa\.me/|whatsapp\.com/send\?phone=)\+?(\d{10,15})", re.I)
+_RE_FONE_BR = re.compile(r"(?<![\d/])(?:\+?55[\s.-]*)?\(?([1-9]\d)\)?[\s.-]*(9[\s.-]?\d{4})[\s.-]?(\d{4})(?!\d)")
+_RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}")
+_RE_UUID = re.compile(r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)
+_RE_CNPJ = re.compile(r"(?<!\d)\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}(?!\d)")
+_RE_TG = re.compile(r"(?:t\.me|telegram\.me)/@?([A-Za-z0-9_]{5,32})", re.I)
+_RE_LINK = re.compile(
+    r"(?<![@\w.])((?:[a-z0-9-]+\.)+(?:com|net|org|br|io|me|ly|ee|ai|co|cc|gd|site|app|xyz|online|shop|store|"
+    r"link|bio|info|top|click|live|vip))(/[^\s\"'<>()]*)?", re.I)
+# encurtadores e páginas de links: o caminho é o que identifica (bit.ly/abc ≠ bit.ly/xyz)
+ENCURTADORES = {"bit.ly", "tinyurl.com", "linktr.ee", "cutt.ly", "is.gd", "beacons.ai", "wa.link",
+                "encurtador.com.br", "abre.ai", "l.ead.me", "linkme.bio"}
+# domínios das próprias plataformas e dos canais já extraídos acima não contam como "link"
+DOMINIOS_IGNORADOS = {"wa.me", "t.me", "telegram.me", "whatsapp.com", "api.whatsapp.com", "instagram.com",
+                      "tiktok.com", "youtube.com", "youtu.be", "github.com", "gitlab.com", "twitch.tv",
+                      "kick.com", "bsky.app", "medium.com", "keybase.io", "facebook.com", "x.com", "twitter.com"}
+TIPOS_CONTATO = {"telefone": "telefone/WhatsApp", "email": "e-mail", "pix": "chave PIX aleatória",
+                 "cnpj": "CNPJ", "telegram": "Telegram", "link": "link"}
+
+
+def extrair_contatos(texto):
+    """Contatos publicados em um texto: [{"tipo", "valor"}] normalizados e sem repetição."""
+    texto = texto or ""
+    achados, vistos = [], set()
+
+    def add(tipo, valor):
+        if valor and (tipo, valor) not in vistos:
+            vistos.add((tipo, valor))
+            achados.append({"tipo": tipo, "valor": valor})
+
+    for m in _RE_WA.finditer(texto):
+        add("telefone", "+" + m.group(1))
+    for m in _RE_FONE_BR.finditer(texto):
+        add("telefone", "+55" + m.group(1) + re.sub(r"\D", "", m.group(2)) + m.group(3))
+    for m in _RE_EMAIL.finditer(texto):
+        add("email", m.group(0).lower())
+    for m in _RE_UUID.finditer(texto):
+        add("pix", m.group(0).lower())
+    for m in _RE_CNPJ.finditer(texto):
+        add("cnpj", m.group(0))
+    for m in _RE_TG.finditer(texto):
+        add("telegram", "@" + m.group(1).lower())
+    for m in _RE_LINK.finditer(texto):
+        dominio = m.group(1).lower()
+        dominio = dominio[4:] if dominio.startswith("www.") else dominio
+        if dominio in DOMINIOS_IGNORADOS or any(dominio.endswith("." + d) for d in DOMINIOS_IGNORADOS):
+            continue
+        caminho = (m.group(2) or "").rstrip(".,;:!?")
+        add("link", dominio + caminho if dominio in ENCURTADORES and caminho not in ("", "/") else dominio)
+    return achados
+
+
+def pivos_de(achados):
+    """Contatos que aparecem em 2 ou mais perfis sósias: [{"tipo","valor","perfis":[(variante, site, risco)]}]."""
+    grupos = {}
+    for a in achados:
+        for c in a.get("contatos", []):
+            grupos.setdefault((c["tipo"], c["valor"]), {})[(a["variante"], a["site"])] = a["risco"]
+    saida = [{"tipo": t, "valor": v, "perfis": [[var, s, r] for (var, s), r in sorted(p.items())]}
+             for (t, v), p in grupos.items() if len(p) >= 2]
+    return sorted(saida, key=lambda g: (-len(g["perfis"]), g["tipo"], g["valor"]))
+
+
+def ligar_contatos(achados, oficiais=()):
+    """
+    Marca nos achados os contatos repetidos entre sósias e sobe para CRÍTICO quem divide um
+    contato com um perfil CRÍTICO (mesma operação). Contatos que o próprio original publica
+    são oficiais e não contam. Devolve a lista de pivôs.
+    """
+    oficiais = {(c["tipo"], c["valor"]) for c in oficiais}
+    for a in achados:
+        a["contatos"] = [c for c in a.get("contatos", []) if (c["tipo"], c["valor"]) not in oficiais]
+    pivos = pivos_de(achados)
+    por_perfil = {(a["variante"], a["site"]): a for a in achados}
+    for g in pivos:
+        membros = [por_perfil[(v, s)] for v, s, _ in g["perfis"]]
+        tem_critico = any(m["risco"] == "CRÍTICO" for m in membros)
+        for m in membros:
+            outros = len(membros) - 1
+            quem = "outro sósia" if outros == 1 else f"outros {outros} sósias"
+            m["sinais"].append(f"mesmo {TIPOS_CONTATO[g['tipo']]} de {quem}: {g['valor']}")
+            if tem_critico and m["risco"] != "CRÍTICO":
+                m["risco"], m["peso"] = "CRÍTICO", 1.1
+                m["sinais"].append("divide contato com um perfil CRÍTICO (mesma operação)")
+    return pivos_de(achados)
 
 
 def avaliar_perfil(original, perfil_original, perfil):
@@ -361,20 +486,30 @@ def analisar_perfis(original, achados, sites, varredura, rede=baixar, pausa=0.3,
         if info["confiavel"] and info["original"] == "EXISTE" and info["site"] in sites:
             originais[info["site"]] = ler_perfil(sites[info["site"]], original.lower(), rede, info["site"])
             time.sleep(pausa)
-    legiveis = criticos = 0
+    oficiais = [c for p in originais.values() if p for c in extrair_contatos(p["nome"] + " " + p["bio"])]
+    legiveis = 0
     for a in achados:
-        perfil = ler_perfil(sites[a["site"]], a["variante"], rede, a["site"]) if a["site"] in sites else None
+        perfil, prova = (ler_pagina(sites[a["site"]], a["variante"], rede, a["site"])
+                         if a["site"] in sites else (None, None))
         time.sleep(pausa)
         sinais, critico = avaliar_perfil(original, originais.get(a["site"]), perfil)
         a["perfil_nome"] = perfil["nome"] if perfil else ""
         a["perfil_bio"] = perfil["bio"] if perfil else ""
         a["perfil_legivel"] = bool(perfil)
         a["sinais"] = sinais
+        a["contatos"] = extrair_contatos(a["perfil_nome"] + " " + a["perfil_bio"]) if perfil else []
+        if prova:
+            a["prova"] = {k: v for k, v in prova.items() if k != "corpo"}
+            if prova["status"] == 200:
+                a["_corpo"] = prova["corpo"]  # vai para evidencias/ em salvar() e sai do JSON
         legiveis += bool(perfil)
         if critico:
             a["risco"], a["peso"] = "CRÍTICO", 1.1
-            criticos += 1
+    pivos = ligar_contatos(achados, oficiais)
+    criticos = sum(1 for a in achados if a["risco"] == "CRÍTICO")
     mostrar(f"\n  Perfis lidos: {legiveis} de {len(achados)} · CRÍTICOS (imitam o original): {criticos}")
+    if pivos:
+        mostrar(f"  Pivôs: {len(pivos)} contato(s) repetido(s) em mais de um sósia (provável mesma operação)")
     return sorted(achados, key=lambda a: (-a["peso"], a["variante"], a["site"]))
 
 
@@ -439,7 +574,7 @@ def achados_de(original, lista, varredura):
                                 "risco": risco(v["peso"]), "peso": v["peso"],
                                 "url": info["url"].replace("{}", variante),
                                 "perfil_nome": "", "perfil_bio": "", "perfil_legivel": False,
-                                "sinais": [], "novo": False})
+                                "sinais": [], "novo": False, "contatos": [], "prova": None})
     return sorted(achados, key=lambda a: (-a["peso"], a["variante"], a["site"]))
 
 
@@ -464,13 +599,25 @@ def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, co
             "fonte_sites": fonte_sites, "modo": "verificação" if varredura else "só geração"}
 
     arquivos = {}
+    # evidências: a página exatamente como chegou, com extensão .txt para nunca rodar script de golpista
+    com_corpo = [a for a in achados if "_corpo" in a]
+    if com_corpo:
+        os.makedirs(os.path.join(pasta, "evidencias"))
+    for i, a in enumerate(com_corpo, 1):
+        nome = f"evidencias/{i:02d}_{_seguro(a['site'])}_{_seguro(a['variante'])}.html.txt"
+        arquivos[nome] = os.path.join(pasta, *nome.split("/"))
+        with open(arquivos[nome], "w", encoding="utf-8", newline="") as f:
+            f.write(a.pop("_corpo"))
+        if a.get("prova"):
+            a["prova"]["arquivo"] = nome
+    pivos = pivos_de(achados)
     arquivos["variantes.txt"] = os.path.join(pasta, "variantes.txt")
     with open(arquivos["variantes.txt"], "w", encoding="utf-8") as f:
         f.write("\n".join(v["variante"] for v in lista) + "\n")
     arquivos["dados.json"] = os.path.join(pasta, "dados.json")
     with open(arquivos["dados.json"], "w", encoding="utf-8") as f:
         json.dump({"meta": meta, "variantes": lista, "varredura": varredura, "achados": achados,
-                   "comparacao": comparacao}, f, ensure_ascii=False, indent=2)
+                   "pivos": pivos, "comparacao": comparacao}, f, ensure_ascii=False, indent=2)
     arquivos["achados.csv"] = os.path.join(pasta, "achados.csv")
     with open(arquivos["achados.csv"], "w", newline="", encoding="utf-8-sig") as f:
         w = csv.DictWriter(f, fieldnames=["risco", "novo", "variante", "site", "tecnica", "perfil_nome",
@@ -488,6 +635,24 @@ def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, co
                     w.writerow(["NOVO", a["risco"], a["variante"], a["site"], a["url"]])
             for x in comparacao["sumiram"]:
                 w.writerow(["SUMIU", "", x["variante"], x["site"], ""])
+    if any(a.get("contatos") for a in achados):
+        arquivos["contatos.csv"] = os.path.join(pasta, "contatos.csv")
+        repetidos = {(g["tipo"], g["valor"]): len(g["perfis"]) for g in pivos}
+        with open(arquivos["contatos.csv"], "w", newline="", encoding="utf-8-sig") as f:
+            w = csv.writer(f)
+            w.writerow(["tipo", "valor", "perfis_com_este_contato", "risco", "variante", "site", "url"])
+            linhas = [(c, a) for a in achados for c in a.get("contatos", [])]
+            for c, a in sorted(linhas, key=lambda x: (-repetidos.get((x[0]["tipo"], x[0]["valor"]), 1),
+                                                       x[0]["tipo"], x[0]["valor"])):
+                w.writerow([TIPOS_CONTATO[c["tipo"]], c["valor"], repetidos.get((c["tipo"], c["valor"]), 1),
+                            a["risco"], a["variante"], a["site"], a["url"]])
+    if varredura:
+        arquivos["denuncia.md"] = os.path.join(pasta, "denuncia.md")
+        with open(arquivos["denuncia.md"], "w", encoding="utf-8") as f:
+            f.write(denuncia_md(meta, achados, pivos))
+        arquivos["achados.stix.json"] = os.path.join(pasta, "achados.stix.json")
+        with open(arquivos["achados.stix.json"], "w", encoding="utf-8") as f:
+            json.dump(stix_bundle(meta, achados, pivos), f, ensure_ascii=False, indent=2)
 
     hashes = {n: sha256(p) for n, p in arquivos.items()}
     with open(os.path.join(pasta, "manifesto.txt"), "w", encoding="utf-8") as f:
@@ -496,8 +661,160 @@ def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, co
             f.write(f"SHA-256  {h}  {n}\n")
     relatorio = os.path.join(pasta, "relatorio.html")
     with open(relatorio, "w", encoding="utf-8") as f:
-        f.write(relatorio_html(meta, lista, varredura, achados, hashes, comparacao))
+        f.write(relatorio_html(meta, lista, varredura, achados, hashes, comparacao, pivos))
     return pasta, relatorio, achados
+
+
+# ---------------------------------------------------------------------------
+# 5b. Kit de denúncia e exportação STIX 2.1
+# ---------------------------------------------------------------------------
+
+# Canal oficial de cada plataforma para denunciar perfil que se passa por outra pessoa/marca.
+# Só links conferidos; nas outras plataformas o caminho é o botão "Denunciar" do próprio perfil.
+CANAIS = {
+    "Instagram": "Formulário de falsificação de identidade: https://help.instagram.com/contact/636276399721841",
+    "YouTube": "Política de falsificação de identidade e denúncia: https://support.google.com/youtube/answer/2801947",
+    "TikTok": "No app: Denunciar > \"Fingindo ser outra pessoa\". Com marca registrada: "
+              "https://www.tiktok.com/legal/report/Trademark",
+    "Telegram": "Robô oficial @notoscam (https://t.me/notoscam) ou e-mail abuse@telegram.org",
+    "GitHub": "Denunciar abuso: https://docs.github.com/en/communities/maintaining-your-safety-on-github/"
+              "reporting-abuse-or-spam",
+}
+CANAL_PADRAO = "Abra o perfil e use o botão \"Denunciar\" (motivo: falsificação de identidade / golpe)"
+
+
+def motivo_denuncia(a):
+    """Frase do texto de denúncia montada só com o que o SÓSIA de fato encontrou."""
+    sinais = " ".join(a.get("sinais", []))
+    partes = [f"usa um nome quase igual ao do perfil oficial ({TECNICAS[a['tecnica']][1]})"]
+    if "nome de exibição igual" in sinais:
+        partes.append("exibe o mesmo nome do perfil oficial")
+    elif "nome de exibição usa a marca" in sinais:
+        partes.append("exibe o nome da marca")
+    if "bio copiada" in sinais:
+        partes.append("copia a bio do perfil oficial")
+    if "oferece contato/pagamento" in sinais:
+        partes.append("oferece atendimento, contato ou pagamento fora dos canais oficiais")
+    if "mesmo " in sinais and " de outro" in sinais:
+        partes.append("publica o mesmo contato que outros perfis falsos")
+    return ", ".join(partes[:-1]) + (" e " if len(partes) > 1 else "") + partes[-1]
+
+
+def denuncia_md(meta, achados, pivos):
+    """Rascunho de denúncia por plataforma para os CRÍTICOS e ALTOS, com evidência e hash."""
+    original = meta["original"]
+    alvo = [a for a in achados if a["risco"] in ("CRÍTICO", "ALTO")]
+    linhas = [f"# Kit de denúncia · @{original}", "",
+              f"Gerado pelo {meta['ferramenta']} em {meta['gerado_em_utc']} UTC. "
+              "**Abra cada perfil e confirme antes de enviar.** Registrado não quer dizer golpe; "
+              "denuncie só quem se passa pela marca ou pela pessoa.", "",
+              "Anexe à denúncia o print do perfil, este arquivo e o `manifesto.txt` (os SHA-256 provam que as "
+              "evidências não foram alteradas depois da coleta). Golpe com prejuízo: registre também boletim de "
+              "ocorrência na delegacia online do seu estado.", ""]
+    if not alvo:
+        linhas.append("Nenhum sósia CRÍTICO ou ALTO nesta busca. Nada a denunciar agora.")
+        return "\n".join(linhas) + "\n"
+    if pivos:
+        linhas += ["## Contatos que ligam os perfis", "",
+                   "O mesmo contato em perfis diferentes indica uma única operação. Cite isso na denúncia.", ""]
+        for g in pivos:
+            perfis = ", ".join(f"@{v} ({s})" for v, s, _ in g["perfis"])
+            linhas.append(f"- **{TIPOS_CONTATO[g['tipo']]} `{g['valor']}`**: {perfis}")
+        linhas.append("")
+    for site in sorted({a["site"] for a in alvo}):
+        linhas += [f"## {site}", "", f"Canal: {CANAIS.get(site, CANAL_PADRAO)}", ""]
+        for a in (x for x in alvo if x["site"] == site):
+            linhas += [f"### @{a['variante']} · {a['risco']}", "",
+                       f"- Perfil: {a['url']}",
+                       f"- Técnica: {TECNICAS[a['tecnica']][1]}"]
+            if a.get("perfil_nome") or a.get("perfil_bio"):
+                linhas.append(f"- Nome exibido: {a.get('perfil_nome') or '(vazio)'} · Bio: {a.get('perfil_bio') or '(vazia)'}")
+            for s in a.get("sinais", []):
+                linhas.append(f"- Sinal: {s}")
+            p = a.get("prova")
+            if p:
+                linhas.append(f"- Evidência: `{p.get('arquivo', '')}` · coletada em {p['coletado_em_utc']} UTC · "
+                              f"HTTP {p['status']} · SHA-256 `{p['sha256']}`")
+            motivo = motivo_denuncia(a)
+            linhas += ["", "Texto sugerido:", "",
+                       f"> O perfil @{a['variante']} ({a['url']}) está se passando por @{original}, perfil oficial "
+                       f"desta marca/pessoa. Ele {motivo}. Peço a remoção por falsificação de identidade. "
+                       f"Evidência coletada em {(p or {}).get('coletado_em_utc', meta['gerado_em_utc'])} UTC.", ""]
+    return "\n".join(linhas) + "\n"
+
+
+_NS_SCO = "00abedb4-aa42-466c-9c01-fed23315a9b7"  # namespace UUIDv5 das STIX Cyber-observables (2.1)
+
+
+def _sco_id(tipo, props):
+    canon = json.dumps(props, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return f"{tipo}--{uuid.uuid5(uuid.UUID(_NS_SCO), canon)}"
+
+
+def _sdo_id(tipo, chave):
+    return f"{tipo}--{uuid.uuid5(uuid.NAMESPACE_URL, 'sosia:' + chave)}"
+
+
+def stix_bundle(meta, achados, pivos):
+    """
+    Pacote STIX 2.1 para OpenCTI, MISP e afins: o original como identidade, cada sósia como
+    user-account, relação 'impersonates', nota com os sinais e um agrupamento da busca.
+    IDs determinísticos: a mesma conta gera o mesmo ID em buscas diferentes (deduplica no destino).
+    """
+    quando = meta["gerado_em_utc"].replace(" ", "T") + ".000Z"
+    ferramenta = {"type": "identity", "spec_version": "2.1", "id": _sdo_id("identity", "ferramenta"),
+                  "created": quando, "modified": quando, "name": "SÓSIA", "identity_class": "system"}
+    alvo = {"type": "identity", "spec_version": "2.1", "id": _sdo_id("identity", "alvo:" + meta["original"]),
+            "created": quando, "modified": quando, "name": "@" + meta["original"],
+            "identity_class": "organization", "created_by_ref": ferramenta["id"]}
+    objetos, refs = [ferramenta, alvo], [alvo["id"]]
+    comum = {"spec_version": "2.1", "created": quando, "modified": quando, "created_by_ref": ferramenta["id"]}
+    for a in achados:
+        tipo_conta = a["site"].lower()
+        conta = {"type": "user-account", "spec_version": "2.1",
+                 "id": _sco_id("user-account", {"account_login": a["variante"], "account_type": tipo_conta}),
+                 "account_login": a["variante"], "account_type": tipo_conta,
+                 "x_sosia_risco": a["risco"], "x_sosia_tecnica": a["tecnica"], "x_sosia_url": a["url"]}
+        if a.get("perfil_nome"):
+            conta["display_name"] = a["perfil_nome"]
+        objetos.append(conta)
+        refs.append(conta["id"])
+        objetos.append({"type": "relationship", **comum,
+                        "id": _sdo_id("relationship", f"{a['site']}:{a['variante']}:{meta['original']}"),
+                        "relationship_type": "impersonates", "source_ref": conta["id"], "target_ref": alvo["id"],
+                        "description": f"{TECNICAS[a['tecnica']][1]} · risco {a['risco']}",
+                        "confidence": {"CRÍTICO": 85, "ALTO": 50, "MÉDIO": 30, "BAIXO": 15}[a["risco"]]})
+        if a.get("sinais") or a.get("prova"):
+            texto = "\n".join(a.get("sinais", []))
+            if a.get("prova"):
+                p = a["prova"]
+                texto += f"\nEvidência {p.get('arquivo', '')} · {p['coletado_em_utc']} UTC · SHA-256 {p['sha256']}"
+            objetos.append({"type": "note", **comum,
+                            "id": _sdo_id("note", f"{a['site']}:{a['variante']}:{meta['gerado_em_utc']}"),
+                            "abstract": f"SÓSIA: @{a['variante']} em {a['site']} ({a['risco']})",
+                            "content": texto.strip(), "object_refs": [conta["id"]]})
+    for g in pivos:
+        if g["tipo"] == "email":
+            obs = {"type": "email-addr", "spec_version": "2.1", "value": g["valor"],
+                   "id": _sco_id("email-addr", {"value": g["valor"]})}
+        elif g["tipo"] == "link":
+            valor = g["valor"] if "://" in g["valor"] else "https://" + g["valor"]
+            obs = {"type": "url", "spec_version": "2.1", "value": valor, "id": _sco_id("url", {"value": valor})}
+        else:
+            obs = None
+        contas = [_sco_id("user-account", {"account_login": v, "account_type": s.lower()}) for v, s, _ in g["perfis"]]
+        if obs:
+            objetos.append(obs)
+            refs.append(obs["id"])
+        objetos.append({"type": "note", **comum, "id": _sdo_id("note", f"pivo:{g['tipo']}:{g['valor']}:{quando}"),
+                        "abstract": f"Contato compartilhado: {TIPOS_CONTATO[g['tipo']]} {g['valor']}",
+                        "content": f"O mesmo {TIPOS_CONTATO[g['tipo']]} aparece em {len(contas)} perfis sósias: "
+                                   "provável mesma operação.",
+                        "object_refs": contas + ([obs["id"]] if obs else [])})
+    objetos.append({"type": "grouping", **comum, "id": _sdo_id("grouping", f"{meta['original']}:{quando}"),
+                    "name": f"SÓSIA · perfis imitadores de @{meta['original']} · {meta['gerado_em_utc']} UTC",
+                    "context": "suspicious-activity", "object_refs": refs})
+    return {"type": "bundle", "id": _sdo_id("bundle", f"{meta['original']}:{quando}"), "objects": objetos}
 
 
 SIMBOLO = {"EXISTE": ("●", "existe", "registrado"), "NAO_EXISTE": ("·", "livre", "livre"),
@@ -518,6 +835,10 @@ def celula_perfil(a):
     if a["perfil_bio"]:
         bio = a["perfil_bio"]
         partes.append(f'<span class="bio">{html.escape(bio[:140])}{"…" if len(bio) > 140 else ""}</span>')
+    if a.get("contatos"):
+        partes.append('<span class="contatos">' + " ".join(
+            f'<span class="ct" title="{TIPOS_CONTATO[c["tipo"]]}">{html.escape(c["valor"])}</span>'
+            for c in a["contatos"]) + "</span>")
     if a["sinais"]:
         partes.append('<ul class="sinais">' + "".join(f"<li>{html.escape(x)}</li>" for x in a["sinais"]) + "</ul>")
     return "".join(partes)
@@ -538,7 +859,23 @@ def bloco_mudancas(comparacao, achados):
             f'<div class="painel"><ul class="mudancas">{itens or vazio}</ul></div>')
 
 
-def relatorio_html(meta, lista, varredura, achados, hashes, comparacao=None):
+def bloco_pivos(pivos):
+    if not pivos:
+        return ""
+    itens = []
+    for g in pivos:
+        perfis = " ".join(f'<span class="selo {CLASSE_RISCO[r]}">{r}</span> <span class="mono">@{html.escape(v)}</span> '
+                          f'<span class="vazio">{html.escape(s)}</span>' for v, s, r in g["perfis"])
+        itens.append(f'<li><b>{TIPOS_CONTATO[g["tipo"]]}</b> <span class="mono ct">{html.escape(g["valor"])}</span>'
+                     f'<div class="perfis">{perfis}</div></li>')
+    return ('<h2>Pivôs: o mesmo contato em vários perfis</h2><div class="painel"><ul class="pivos">'
+            + "".join(itens) + '</ul></div><p class="sub">Quem aplica o golpe precisa levar a vítima até um canal '
+            'dele: o WhatsApp, a chave PIX, o link. Quando esse canal se repete em perfis diferentes, é provável que '
+            'seja a mesma operação. Perfis que dividem um contato com um CRÍTICO também viram CRÍTICO. Contatos que '
+            'o próprio perfil oficial publica não contam. Lista completa em <b>contatos.csv</b>.</p>')
+
+
+def relatorio_html(meta, lista, varredura, achados, hashes, comparacao=None, pivos=None):
     original = meta["original"]
     confiaveis = [i for i in varredura if i["confiavel"]]
     descartados = [f'{i["site"]} ({i.get("motivo", "")})' for i in varredura if not i["confiavel"]]
@@ -619,6 +956,12 @@ tr.l-critico td {{ background:color-mix(in srgb, var(--critico) 6%, transparent)
 td.perfil {{ min-width:220px; max-width:340px }}
 .bio {{ display:block; color:var(--suave); font-size:13px }}
 ul.sinais {{ margin:4px 0 0; padding-left:18px; color:var(--critico); font-size:13px }}
+.contatos {{ display:block; margin-top:4px }}
+.ct {{ font:12px ui-monospace, Menlo, Consolas, monospace; background:color-mix(in srgb, var(--novo) 12%, transparent);
+  border-radius:4px; padding:1px 5px; margin-right:4px; white-space:nowrap }}
+ul.pivos {{ margin:0; padding:0; list-style:none }} ul.pivos li {{ padding:8px 0; border-bottom:1px solid var(--linha) }}
+ul.pivos li:last-child {{ border-bottom:none }} .perfis {{ margin-top:4px; display:flex; flex-wrap:wrap; gap:4px 12px; font-size:13px }}
+.arquivos {{ columns:2 240px; padding-left:18px }} .arquivos li {{ break-inside:avoid }}
 ul.mudancas {{ margin:0; padding-left:0; list-style:none }} ul.mudancas li {{ padding:5px 0 }}
 .matriz {{ width:auto }} .matriz td, .matriz th {{ border-bottom:1px solid var(--linha); padding:4px 6px; vertical-align:middle }}
 .matriz th.vert {{ height:110px; vertical-align:bottom; padding:0 }}
@@ -647,10 +990,13 @@ tr.orig .c.existe {{ color:var(--tinta) }}
   <div class="card critico"><b>{critico}</b><span>CRÍTICOS: imitam o perfil original</span></div>
   <div class="card alto"><b>{alto}</b><span>sósias de risco ALTO</span></div>
   <div class="card novo"><b>{novos if comparacao else '—'}</b><span>novos desde a última verificação</span></div>
+  <div class="card"><b>{len(pivos or [])}</b><span>contatos repetidos entre sósias (pivôs)</span></div>
   <div class="card"><b>{len(achados)}</b><span>registros de variantes no total</span></div>
 </div>
 
 {bloco_mudancas(comparacao, achados) if varredura else ''}
+
+{bloco_pivos(pivos)}
 
 <h2>Sósias encontrados</h2>
 <div class="painel"><table class="achados">
@@ -672,6 +1018,18 @@ ou a marca no nome junto com oferta de "suporte", PIX ou WhatsApp. Mesmo assim, 
 denunciar. "Não legível sem login" quer dizer que a plataforma não mostra nome e bio a visitantes: abra você mesmo.
 "Livre" significa que o nome pode ser registrado por qualquer pessoa hoje: considere registrar os mais perigosos
 antes de um golpista. A lista completa de variantes está em <b>variantes.txt</b>.</p>
+
+<h2>Arquivos desta busca</h2>
+<ul class="arquivos sub">
+<li><b>denuncia.md</b>: rascunho de denúncia por plataforma, com canal oficial, texto e evidências</li>
+<li><b>achados.csv</b>: sósias encontrados (abre no Excel)</li>
+<li><b>contatos.csv</b>: telefones, e-mails, PIX e links das bios (quando houver)</li>
+<li><b>mudancas.csv</b>: NOVO e SUMIU desde a busca anterior (quando houver)</li>
+<li><b>evidencias/</b>: cada página lida, como chegou, em .txt (não executa nada)</li>
+<li><b>achados.stix.json</b>: para importar no OpenCTI, MISP ou outra plataforma de inteligência</li>
+<li><b>variantes.txt</b> e <b>dados.json</b>: lista completa e dados brutos</li>
+<li><b>manifesto.txt</b>: SHA-256 de tudo acima, para provar que nada foi alterado</li>
+</ul>
 
 <div class="rodape">{meta['ferramenta']} · fonte da lista de sites: {html.escape(meta['fonte_sites'])}<br>
 {'<br>'.join(f'SHA-256 {h} · {n}' for n, h in hashes.items())}</div>
@@ -760,7 +1118,12 @@ def main(argv):
 
     conta = {r: sum(1 for a in achados if a["risco"] == r) for r in ("CRÍTICO", "ALTO")}
     print(f"\nSósias registrados: {len(achados)} (CRÍTICO: {conta['CRÍTICO']}, ALTO: {conta['ALTO']})")
+    pivos = pivos_de(achados)
+    if pivos:
+        print(f"Pivôs (mesmo contato em vários sósias): {len(pivos)}")
     print(f"Relatório: {relatorio}")
+    if varredura:
+        print(f"Kit de denúncia: {os.path.join(pasta, 'denuncia.md')}")
     if "--sem-abrir" not in argv:
         webbrowser.open("file://" + os.path.abspath(relatorio))
     if guiado:
