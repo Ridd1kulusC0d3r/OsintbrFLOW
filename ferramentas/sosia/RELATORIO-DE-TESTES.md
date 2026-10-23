@@ -1,18 +1,18 @@
-# RELATÓRIO DE TESTES — SÓSIA 1.2.0
+# RELATÓRIO DE TESTES — SÓSIA 1.3.0
 
-Data: 2026-10-17 11:03 UTC  
-Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v139-x86_64-with-glibc2.39`
+Data: 2026-10-23 01:47 UTC  
+Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v140-x86_64-with-glibc2.39`
 
 ## Matriz de versões do Python
 
 | Versão | Testes | Resultado | Tempo |
 |---|---|---|---|
-| Python 3.9.25 | 36 | **PASSOU** | 0.198 s |
-| Python 3.10.20 | 36 | **PASSOU** | 0.228 s |
-| Python 3.11.17 | 36 | **PASSOU** | 0.248 s |
-| Python 3.12.3 | 36 | **PASSOU** | 0.242 s |
-| Python 3.13.16 | 36 | **PASSOU** | 0.246 s |
-| Python 3.14.6 | 36 | **PASSOU** | 0.201 s |
+| Python 3.9.25 | 45 | **PASSOU** | 1.257 s |
+| Python 3.10.20 | 45 | **PASSOU** | 1.136 s |
+| Python 3.11.17 | 45 | **PASSOU** | 1.249 s |
+| Python 3.12.3 | 45 | **PASSOU** | 6.221 s |
+| Python 3.13.16 | 45 | **PASSOU** | 5.752 s |
+| Python 3.14.6 | 45 | **PASSOU** | 2.013 s |
 
 Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 
@@ -30,6 +30,14 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 | `test_demo_gera_pivo_evidencias_denuncia_e_stix` | Caso demo: 1 pivô, 7 evidências com hash conferido no manifesto, denúncia com canais oficiais | ok |
 | `test_prova_da_leitura` | Toda página lida gera prova: status, hora UTC e SHA-256; falha de rede não gera prova | ok |
 | `test_stix_bem_formado_e_deterministico` | STIX 2.1 sem referência quebrada e com o mesmo ID para a mesma conta em buscas diferentes | ok |
+| `test_alertas` | Alerta: CRÍTICOS na 1ª busca; depois, só CRÍTICO/ALTO novos | ok |
+| `test_codigos_de_saida` | Códigos de saída: 0 sem alerta, 2 com alerta, 1 para erro de uso (nunca confundido com alerta) | ok |
+| `test_contas_oficiais_nunca_viram_sosia` | Conta oficial informada some dos sósias e o limite de 60 variantes continua cheio | ok |
+| `test_espera_e_tenta_de_novo_quando_a_plataforma_limita` | 429 com Retry-After: espera (no máximo 8 s) e tenta de novo uma única vez | ok |
+| `test_limpar_nome` | '@Banco.Aurora' e ' banco.aurora ' viram o mesmo username | ok |
+| `test_modo_guiado_sem_teclado_nao_quebra` | Modo guiado sem teclado sai limpo; com respostas, guarda as contas oficiais e respeita 'só gerar' | ok |
+| `test_para_de_insistir_quando_a_plataforma_fecha_a_porta` | Depois de 5 bloqueios seguidos para de consultar a plataforma, marca o resto como '?' e avisa no relatório | ok |
+| `test_sites_extra_e_filtro` | 12 plataformas padrão, 17 com --extra, filtro sem diferenciar maiúsculas e erro claro para plataforma desconhecida | ok |
 | `test_acha_execucao_anterior_na_pasta` | Acha a última busca completa da mesma marca, ignorando 'só gerar' e outras marcas | ok |
 | `test_duas_execucoes_reais_pela_linha_de_comando` | Duas buscas seguidas pela linha de comando: pastas separadas e 0 novos na segunda | ok |
 | `test_sem_anterior` | Primeira execução: nada marcado como novo | ok |
@@ -44,6 +52,7 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 | `test_ignora_plataformas_cpf_e_texto_comum` | Não extrai links das próprias plataformas, CPF (LGPD) nem números comuns do texto | ok |
 | `test_outros_tipos` | Extrai chave PIX aleatória, e-mail, Telegram, CNPJ, encurtador (com caminho) e site (só domínio) | ok |
 | `test_whatsapp_e_telefone_viram_o_mesmo_numero` | wa.me, (31) 90000-0000 e +55 31 9 0000-0000 viram o mesmo número normalizado | ok |
+| `test_busca_completa_pela_rede` | Busca inteira pelo urllib de verdade contra servidor local: status, mensagem, redirecionamento, soft-404 e 429 | ok |
 | `test_cli_demo` | Linha de comando --demo roda do início ao fim e gera a pasta de resultados | ok |
 | `test_demo_ponta_a_ponta` | Caso demo completo: 7 sósias, 3 CRÍTICOS, Kick descartado, 3 novos e 1 sumido, hashes conferem | ok |
 | `test_html_escapa` | Relatório HTML neutraliza código malicioso vindo de nomes | ok |
@@ -62,8 +71,8 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 `python sosia.py --demo --sem-abrir` → **PASSOU**
 
 ```
-Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261017-110325/relatorio.html
-Kit de denúncia: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261017-110325/denuncia.md
+Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261023-014744/relatorio.html
+Kit de denúncia: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261023-014744/denuncia.md
 ```
 
 ## O que NÃO foi testado aqui (faça na sua máquina)

@@ -386,3 +386,203 @@ class TestEvidenciaDenunciaStix(unittest.TestCase):
         # valor conferido com a biblioteca oficial stix2 (UserAccount(account_login='banc0aurora', account_type='instagram'))
         self.assertIn(sosia._sco_id("user-account", {"account_login": "banc0aurora", "account_type": "instagram"}),
                       contas(b1))
+
+
+class TestFluxoELinhaDeComando(unittest.TestCase):
+    """1.3: executar() único, contas oficiais, filtro de plataformas, espera em 429 e código de alerta."""
+
+    def rodar(self, *args):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch("builtins.print"), \
+                mock.patch("sosia.webbrowser.open"):
+            codigo = sosia.main(list(args) + ["--sem-abrir", "--saida", tmp])
+            pastas = [os.path.join(tmp, d) for d in os.listdir(tmp)]
+            dados = json.loads(ler(os.path.join(pastas[0], "dados.json"))) if pastas else None
+        return codigo, dados
+
+    def test_limpar_nome(self):
+        self.assertEqual(sosia.limpar_nome("  @Banco.Aurora "), "banco.aurora")
+        self.assertEqual(sosia.limpar_nome(None), "")
+
+    def test_espera_e_tenta_de_novo_quando_a_plataforma_limita(self):
+        respostas = [(429, "", "3"), (200, "ok", None)]
+        with mock.patch("sosia._uma_vez", side_effect=respostas) as rede, \
+                mock.patch("sosia.time.sleep") as dorme:
+            self.assertEqual(sosia.baixar("https://ex.com/a"), (200, "ok"))
+        self.assertEqual(rede.call_count, 2)
+        dorme.assert_called_once_with(3.0)
+        with mock.patch("sosia._uma_vez", return_value=(429, "", None)) as rede, mock.patch("sosia.time.sleep"):
+            self.assertEqual(sosia.baixar("https://ex.com/a")[0], 429)  # só uma nova tentativa
+        self.assertEqual(rede.call_count, 2)
+        self.assertEqual(sosia.tempo_de_espera("600"), sosia.ESPERA_MAXIMA)
+        self.assertEqual(sosia.tempo_de_espera("Wed, 21 Oct 2026 07:28:00 GMT"), 2.0)
+
+    def test_para_de_insistir_quando_a_plataforma_fecha_a_porta(self):
+        chamadas = []
+
+        def rede(url, *a):
+            chamadas.append(url)
+            if url.endswith(("/ana", "/zq")) or "/zq" in url:
+                return 404, ""
+            return 403, ""  # bloqueou tudo depois da linha de base
+        lista = sosia.variantes("ana", 30)
+        info = sosia.varrer_site("X", SITE, "ana", lista, rede, 0)
+        self.assertTrue(info["confiavel"])
+        self.assertEqual(len(chamadas), 2 + sosia.LIMITES_SEGUIDOS)  # controle + original + 5 tentativas
+        self.assertEqual(set(info["resultados"].values()), {"INCONCLUSIVO"})
+        self.assertEqual(len(info["resultados"]), len(lista))
+        self.assertIn("bloqueios seguidos", info["motivo"])
+        meta = {"ferramenta": "t", "original": "ana", "gerado_em_utc": "", "variantes_verificadas": 30,
+                "plataformas": 1, "fonte_sites": "x", "modo": "verificação"}
+        self.assertIn("incompletas: X (parou depois", sosia.relatorio_html(meta, lista, [info], [], {}))
+
+    def test_sites_extra_e_filtro(self):
+        self.assertEqual(len(sosia.carregar_sites()), 12)
+        extra = sosia.carregar_sites(extra=True)
+        self.assertEqual(len(extra), 17)
+        self.assertIn("Twitter", extra)
+        so = sosia.carregar_sites(plataformas=["instagram", " TikTok "])
+        self.assertEqual(list(so), ["Instagram", "TikTok"])
+        with self.assertRaises(ValueError) as erro:
+            sosia.carregar_sites(plataformas=["Orkut"])
+        self.assertIn("Disponíveis", str(erro.exception))
+
+    def test_contas_oficiais_nunca_viram_sosia(self):
+        sites = sosia.carregar_sites()
+        original, rede, anterior = sosia.rede_demo(sites)
+        busca = sosia.executar(original, sites, rede, 0, 60, True, ["@BancoAurora_Oficial", "bancoaurora"],
+                               anterior, mostrar=lambda *a: None)
+        self.assertEqual(busca["oficiais"], ["bancoaurora_oficial"])  # o próprio original sai da lista
+        self.assertEqual(len(busca["lista"]), 60)  # o limite continua cheio
+        self.assertNotIn("bancoaurora_oficial", {v["variante"] for v in busca["lista"]})
+        self.assertNotIn("bancoaurora_oficial", {a["variante"] for a in busca["achados"]})
+        self.assertEqual(len(busca["achados"]), 6)
+
+    def test_alertas(self):
+        a = {"risco": "CRÍTICO", "novo": False}
+        b = {"risco": "ALTO", "novo": True}
+        c = {"risco": "MÉDIO", "novo": True}
+        self.assertEqual(sosia.alertas_de([a, b, c], None), [a])  # 1ª busca: os CRÍTICOS
+        self.assertEqual(sosia.alertas_de([a, b, c], {"novos": 2}), [b])  # depois: CRÍTICO/ALTO novos
+
+    def test_codigos_de_saida(self):
+        self.assertEqual(self.rodar("--demo")[0], sosia.SAIDA_OK)
+        codigo, dados = self.rodar("--demo", "--alerta", "--oficiais", "bancoaurora_suporte")
+        self.assertEqual(codigo, sosia.SAIDA_ALERTA)
+        self.assertEqual(dados["meta"]["oficiais"], ["bancoaurora_suporte"])
+        self.assertEqual(self.rodar("--demo", "--plataformas", "GitHub", "--alerta")[0], sosia.SAIDA_OK)
+        self.assertEqual(self.rodar("x", "--plataformas", "Orkut")[0], sosia.SAIDA_ERRO)
+        with mock.patch("sys.stderr"), self.assertRaises(SystemExit) as saida:
+            self.rodar("x", "--max", "0")
+        self.assertEqual(saida.exception.code, sosia.SAIDA_ERRO)  # erro de uso nunca é confundido com alerta
+
+    def test_modo_guiado_sem_teclado_nao_quebra(self):
+        with mock.patch("builtins.input", side_effect=EOFError), mock.patch("builtins.print"):
+            self.assertEqual(sosia.main([]), sosia.SAIDA_ERRO)
+        with mock.patch("builtins.input", side_effect=["@marca", "marca_sac", "s", ""]), \
+                mock.patch("builtins.print"), tempfile.TemporaryDirectory() as tmp, \
+                mock.patch("os.getcwd", return_value=tmp), mock.patch("sosia.webbrowser.open"), \
+                mock.patch("sosia.baixar", side_effect=AssertionError("rede!")):
+            self.assertEqual(sosia.main([]), sosia.SAIDA_OK)
+            pasta = os.path.join(tmp, "resultados", os.listdir(os.path.join(tmp, "resultados"))[0])
+            dados = json.loads(ler(os.path.join(pasta, "dados.json")))
+            lista = ler(os.path.join(pasta, "variantes.txt")).split()
+        self.assertEqual(dados["meta"]["oficiais"], ["marca_sac"])
+        self.assertEqual(dados["meta"]["modo"], "só geração")  # respondeu "s" para só gerar
+        self.assertIn("marc4", lista)
+        self.assertNotIn("marca_sac", lista)  # conta oficial fora da lista
+
+
+class TestRedeDeVerdade(unittest.TestCase):
+    """
+    Integração: a busca inteira passa pelo urllib de verdade (baixar(), redirecionamentos, 429 com
+    Retry-After, páginas com og:) contra um servidor HTTP local que imita quatro plataformas.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import http.server
+        import threading
+
+        limitou = set()
+
+        class Plataformas(http.server.BaseHTTPRequestHandler):
+            def log_message(self, *args):
+                pass
+
+            def responder(self, status, corpo="", cabecalhos=()):
+                dados = corpo.encode("utf-8")
+                self.send_response(status)
+                for k, v in cabecalhos:
+                    self.send_header(k, v)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(dados)))
+                self.end_headers()
+                self.wfile.write(dados)
+
+            def do_GET(self):
+                _, plat, nome = self.path.split("/", 2)
+                pagina = ('<html><head><meta property="og:title" content="{t}">'
+                          '<meta content="{b}" property="og:description"></head></html>')
+                if plat == "status":  # errorType status_code
+                    if nome == "aurora":
+                        return self.responder(200, pagina.format(t="Aurora", b="Banco Aurora oficial"))
+                    if nome == "aur0ra":
+                        return self.responder(200, pagina.format(
+                            t="Aurora", b="Suporte 24h: wa.me/5511988887777"))
+                    return self.responder(404, "nada")
+                if plat == "msg":  # errorType message
+                    if nome == "aurora":
+                        return self.responder(200, pagina.format(t="Aurora", b="Banco Aurora oficial"))
+                    if nome == "aurora_suporte":
+                        return self.responder(200, pagina.format(
+                            t="Suporte Aurora", b="PIX travado? (11) 98888-7777"))
+                    return self.responder(200, "<p>Usuário não encontrado</p>")
+                if plat == "redir":  # errorType response_url: inexistente redireciona
+                    if nome == "aurora":
+                        return self.responder(200, "perfil")
+                    return self.responder(302, "", [("Location", "/redir-home/")])
+                if plat == "mente":  # soft-404: tudo existe
+                    return self.responder(200, "perfil")
+                if plat == "calma":  # pede calma uma vez por nome, depois responde
+                    if nome not in limitou:
+                        limitou.add(nome)
+                        return self.responder(429, "devagar", [("Retry-After", "1")])
+                    return self.responder(200 if nome == "aurora" else 404, "")
+                return self.responder(404, "")
+
+        cls.servidor = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Plataformas)
+        cls.fio = threading.Thread(target=cls.servidor.serve_forever, daemon=True)
+        cls.fio.start()
+        base = f"http://127.0.0.1:{cls.servidor.server_address[1]}"
+        cls.sites = {
+            "Status": {"url": base + "/status/{}", "errorType": "status_code"},
+            "Mensagem": {"url": base + "/msg/{}", "errorType": "message", "errorMsg": "não encontrado"},
+            "Redireciona": {"url": base + "/redir/{}", "errorType": "response_url"},
+            "Mente": {"url": base + "/mente/{}", "errorType": "status_code"},
+            "Calma": {"url": base + "/calma/{}", "errorType": "status_code"},
+        }
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.servidor.shutdown()
+        cls.servidor.server_close()
+        cls.fio.join(5)
+
+    def test_busca_completa_pela_rede(self):
+        with mock.patch.dict(os.environ, {"NO_PROXY": "127.0.0.1", "no_proxy": "127.0.0.1"}), \
+                mock.patch("sosia.time.sleep"):
+            busca = sosia.executar("aurora", self.sites, sosia.baixar, 0, 40, True, mostrar=lambda *a: None)
+        por_site = {i["site"]: i for i in busca["varredura"]}
+        self.assertFalse(por_site["Mente"]["confiavel"])  # soft-404 descartado
+        for nome in ("Status", "Mensagem", "Redireciona", "Calma"):
+            self.assertTrue(por_site[nome]["confiavel"], nome)
+            self.assertEqual(por_site[nome]["original"], "EXISTE", nome)
+        self.assertEqual(set(por_site["Calma"]["resultados"].values()), {"NAO_EXISTE"})  # 429 → espera → 404
+        pares = {(a["variante"], a["site"]): a for a in busca["achados"]}
+        self.assertEqual(set(pares), {("aur0ra", "Status"), ("aurora_suporte", "Mensagem")})
+        self.assertEqual(pares[("aur0ra", "Status")]["risco"], "CRÍTICO")  # nome igual ao original
+        self.assertEqual(pares[("aurora_suporte", "Mensagem")]["risco"], "CRÍTICO")  # marca + PIX na bio
+        self.assertEqual(pares[("aur0ra", "Status")]["prova"]["status"], 200)
+        # o mesmo número escrito de dois jeitos (wa.me e "(11) 98888-7777") liga as duas plataformas
+        self.assertEqual([(p["tipo"], p["valor"]) for p in busca["pivos"]], [("telefone", "+5511988887777")])
+        self.assertTrue(any("de outro sósia" in s for s in pares[("aur0ra", "Status")]["sinais"]))

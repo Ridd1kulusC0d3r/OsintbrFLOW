@@ -78,6 +78,18 @@ class UsernameToImpersonatorsEnricher(Enricher):
                 ],
             },
             {
+                "name": "oficiais",
+                "type": "string",
+                "description": "Contas da própria marca, separadas por vírgula (ex.: 'bancoaurora_sac,bancoaurora.rj'): nunca viram sósia.",
+                "required": False,
+            },
+            {
+                "name": "plataformas",
+                "type": "string",
+                "description": "Só estas plataformas, separadas por vírgula (ex.: 'Instagram,TikTok'). Vazio = as 12 padrão.",
+                "required": False,
+            },
+            {
                 "name": "modo",
                 "type": "select",
                 "description": "'demo' usa o caso fictício bancoaurora, sem internet (para laboratório e Colab).",
@@ -95,19 +107,32 @@ class UsernameToImpersonatorsEnricher(Enricher):
         if texto:
             Logger.info(self.sketch_id, {"message": f"[SÓSIA] {texto}"})
 
+    @staticmethod
+    def _virgulas(valor) -> List[str]:
+        return [x.strip() for x in str(valor or "").split(",") if x.strip()]
+
     def _analisar(self, original: str, sites: Dict, rede, pausa: float) -> List[Dict]:
         """Bloqueante (rede + linhas de execução): roda fora do laço assíncrono."""
-        lista = sosia.variantes(original, int(self.params.get("max_variantes") or 60))
-        varredura = sosia.varrer(original, lista, sites, rede, pausa, mostrar=self._log)
-        achados = sosia.achados_de(original, lista, varredura)
-        if self.params.get("ler_perfil", "sim") != "nao":
-            achados = sosia.analisar_perfis(
-                original, achados, sites, varredura, rede, pausa, mostrar=self._log
-            )
-        return achados
+        busca = sosia.executar(
+            original,
+            sites,
+            rede,
+            pausa,
+            maximo=int(self.params.get("max_variantes") or 60),
+            ler_perfis=self.params.get("ler_perfil", "sim") != "nao",
+            oficiais=self._virgulas(self.params.get("oficiais")),
+            mostrar=self._log,
+        )
+        return busca["achados"]
 
     async def scan(self, data: List[InputType]) -> List[OutputType]:
-        sites = sosia.carregar_sites()
+        try:
+            sites = sosia.carregar_sites(
+                plataformas=self._virgulas(self.params.get("plataformas")) or None
+            )
+        except ValueError as e:
+            Logger.error(self.sketch_id, {"message": f"[SÓSIA] {e}"})
+            return []
         demo = self.params.get("modo") == "demo"
         minimo = NIVEIS.index(self.params.get("risco_minimo") or "MÉDIO")
         self.pares: List[Tuple[Username, Username, SocialAccount]] = []

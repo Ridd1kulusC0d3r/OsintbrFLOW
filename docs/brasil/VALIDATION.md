@@ -243,3 +243,17 @@ Os testes do enriquecedor cobrem registro, metadados, parâmetros, o caso demo c
 **Conferências extras:** o pacote STIX do caso demo foi lido pela biblioteca `stix2` da OASIS (25 objetos) e os IDs de `user-account` são iguais aos que ela gera. O SHA-256 de cada arquivo em `evidencias/` é igual ao calculado na coleta.
 
 **Não testado ao vivo:** a mesma limitação da 1.1, porque a rede do ambiente bloqueia as plataformas. Os canais de denúncia foram conferidos por busca na web, não preenchendo os formulários.
+
+## SÓSIA 1.3 — refatoração e uso real — 2026-10-22
+
+**Entrega:** `executar()` como fluxo único (linha de comando e enriquecedor); `argparse` com códigos de saída 0/1/2; `--oficiais`, `--plataformas`, `--extra` (Twitter/X, Pinterest, Reddit, Snapchat, Patreon em `sites_extra.json`), `--alerta`; espera em 429/503 com `Retry-After` (até 8 s, uma nova tentativa) e parada após 5 bloqueios seguidos por plataforma; modo guiado sem teclado e Ctrl+C sem traceback. Enriquecedor: parâmetros `oficiais` e `plataformas`.
+
+| Suíte | Resultado |
+|---|---|
+| `tests/brasil` (CI, Python 3.12) | 123 passaram |
+| `flowsint-enrichers/tests` (Python 3.12) | 42 passaram (+2: contas oficiais e filtro; plataforma desconhecida) |
+| `ferramentas/sosia/tests` | 45 passaram (+9) em Python 3.9, 3.10, 3.11, 3.12, 3.13 e 3.14 |
+
+**Conferências extras:** as regras das 12 plataformas são idênticas ao `data.json` do Sherlock no commit `e40a45e` (26/09/2026). O teste `test_busca_completa_pela_rede` roda a busca inteira pelo `urllib` real contra um servidor HTTP local (status, mensagem, redirecionamento, soft-404 e 429 com `Retry-After`). O pacote `.zip` foi extraído numa pasta limpa e rodado pelo lançador `.sh` (DEMO, nome real com conta oficial e "só gerar").
+
+**Não testado ao vivo:** a rede deste ambiente continua bloqueando as plataformas, e não havia navegador conectado para o teste pelo Chrome.

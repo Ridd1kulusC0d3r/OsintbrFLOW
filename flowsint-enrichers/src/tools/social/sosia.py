@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SÓSIA 1.2 — radar de perfis imitadores
+SÓSIA 1.3 — radar de perfis imitadores
 ======================================
 
 Sherlock, Maigret e similares procuram o username EXATO.
@@ -38,12 +38,15 @@ O que sai em cada busca (pasta resultados/)
     achados.stix.json  STIX 2.1 para OpenCTI/MISP
     manifesto.txt      SHA-256 de tudo
 
-Outras opções
--------------
+Opções mais usadas (todas em: python sosia.py --help)
+-----------------------------------------------------
+    --oficiais A,B     contas da própria marca: nunca viram sósia
+    --plataformas A,B  só estas plataformas      --extra   + X (Twitter), Pinterest, Reddit, Snapchat, Patreon
     --max N            quantas variantes verificar (padrão: 60)
     --sem-perfil       não abre os perfis encontrados (só diz se existem)
     --saida PASTA      onde salvar (padrão: ./resultados)
     --sem-abrir        não abre o relatório no navegador no final
+    --alerta           para agendar: sai com código 2 se houver CRÍTICO/ALTO novo
 
 Licença MIT. Lista de sites: subconjunto do Sherlock Project (MIT).
 """
@@ -66,7 +69,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
-VERSAO = "1.2.0"
+VERSAO = "1.3.0"
 PASTA = os.path.dirname(os.path.abspath(__file__))
 UA = f"Mozilla/5.0 (compatible; SOSIA/{VERSAO}; +brand protection)"
 
@@ -173,31 +176,70 @@ class _NaoSeguir(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def baixar(url, cabecalhos=None, seguir=True, timeout=15):
-    """GET simples. Devolve (status, texto). status=None quando a rede falha."""
+ESPERA_MAXIMA = 8  # segundos: o máximo que o SÓSIA espera quando a plataforma pede calma (429/503)
+
+
+def _uma_vez(url, cabecalhos, seguir, timeout):
     pedido = urllib.request.Request(url, headers={"User-Agent": UA, **(cabecalhos or {})})
     abridor = urllib.request.build_opener() if seguir else urllib.request.build_opener(_NaoSeguir)
     try:
         with abridor.open(pedido, timeout=timeout) as r:
-            return r.status, r.read(400_000).decode("utf-8", "replace")
+            return r.status, r.read(400_000).decode("utf-8", "replace"), None
     except urllib.error.HTTPError as e:
         try:
             corpo = e.read(100_000).decode("utf-8", "replace")
         except Exception:
             corpo = ""
-        return e.code, corpo
+        return e.code, corpo, (e.headers or {}).get("Retry-After")
     except Exception as e:
-        return None, str(e)
+        return None, str(e), None
 
 
-def carregar_sites(caminho=None):
-    """Lê um arquivo no formato do data.json do Sherlock."""
-    caminho = caminho or os.path.join(PASTA, "sites_padrao.json")
-    with open(caminho, encoding="utf-8") as f:
-        dados = json.load(f)
-    return {n: s for n, s in dados.items()
-            if isinstance(s, dict) and "{}" in s.get("url", "")
-            and not s.get("request_payload") and not s.get("isNSFW")}
+def tempo_de_espera(retry_after):
+    """Segundos a esperar a partir do cabeçalho Retry-After (número ou ausente), entre 1 e ESPERA_MAXIMA."""
+    try:
+        return max(1.0, min(float(retry_after), ESPERA_MAXIMA))
+    except (TypeError, ValueError):
+        return 2.0
+
+
+def baixar(url, cabecalhos=None, seguir=True, timeout=15):
+    """
+    GET simples. Devolve (status, texto). status=None quando a rede falha.
+    Se a plataforma responder 429 ou 503 (limite de acesso), espera o que ela pedir (até 8 s)
+    e tenta UMA vez de novo; se continuar limitando, o resultado vira INCONCLUSIVO em checar().
+    """
+    status, corpo, retry_after = _uma_vez(url, cabecalhos, seguir, timeout)
+    if status in (429, 503):
+        time.sleep(tempo_de_espera(retry_after))
+        status, corpo, _ = _uma_vez(url, cabecalhos, seguir, timeout)
+    return status, corpo
+
+
+def carregar_sites(caminho=None, extra=False, plataformas=None):
+    """
+    Lê um arquivo no formato do data.json do Sherlock (padrão: sites_padrao.json, 12 plataformas).
+    extra=True junta sites_extra.json (Twitter/X, Pinterest, Reddit, Snapchat, Patreon).
+    plataformas: nomes a manter (sem diferenciar maiúsculas); ValueError se algum não existir.
+    """
+    caminhos = [caminho or os.path.join(PASTA, "sites_padrao.json")]
+    if extra:
+        caminhos.append(os.path.join(PASTA, "sites_extra.json"))
+    dados = {}
+    for c in caminhos:
+        with open(c, encoding="utf-8") as f:
+            dados.update(json.load(f))
+    sites = {n: s for n, s in dados.items()
+             if isinstance(s, dict) and "{}" in s.get("url", "")
+             and not s.get("request_payload") and not s.get("isNSFW")}
+    if plataformas:
+        por_nome = {n.lower(): n for n in sites}
+        faltam = [p for p in plataformas if p.strip().lower() not in por_nome]
+        if faltam:
+            raise ValueError(f"plataforma(s) desconhecida(s): {', '.join(faltam)}. "
+                             f"Disponíveis: {', '.join(sorted(sites))}")
+        sites = {por_nome[p.strip().lower()]: sites[por_nome[p.strip().lower()]] for p in plataformas}
+    return sites
 
 
 def como_lista(valor):
@@ -238,6 +280,9 @@ def nome_impossivel():
     return "zq" + "".join(random.choice(string.ascii_lowercase) for _ in range(12))
 
 
+LIMITES_SEGUIDOS = 5  # bloqueios/limites seguidos numa plataforma antes de parar de insistir nela
+
+
 def varrer_site(nome, site, original, lista, rede, pausa):
     """Verifica todas as variantes em um site, com uma linha de base antes."""
     controle = checar(site, nome_impossivel(), rede)
@@ -250,8 +295,16 @@ def varrer_site(nome, site, original, lista, rede, pausa):
         info["confiavel"], info["motivo"] = False, "inacessível agora (bloqueio ou sem rede)"
         return info
     info["confiavel"], info["motivo"] = True, ""
+    seguidas = 0
     for v in lista:
-        info["resultados"][v["variante"]] = checar(site, v["variante"], rede)
+        if seguidas >= LIMITES_SEGUIDOS:  # a plataforma fechou a porta: não insiste, marca o resto como "?"
+            info["resultados"][v["variante"]] = "INCONCLUSIVO"
+            continue
+        estado = checar(site, v["variante"], rede)
+        info["resultados"][v["variante"]] = estado
+        seguidas = seguidas + 1 if estado == "INCONCLUSIVO" else 0
+        if seguidas >= LIMITES_SEGUIDOS:
+            info["motivo"] = f"parou depois de {LIMITES_SEGUIDOS} bloqueios seguidos; o restante ficou como '?'"
         time.sleep(pausa)
     return info
 
@@ -268,7 +321,8 @@ def varrer(original, lista, sites, rede=baixar, pausa=0.3, trabalhadores=6, most
             achados = [v for v, r in info["resultados"].items() if r == "EXISTE"]
             if info["confiavel"]:
                 lista_txt = ", ".join(achados[:4]) + (" ..." if len(achados) > 4 else "")
-                mostrar(f"  {nome:<14} {len(achados)} sósia(s)   {lista_txt}")
+                aviso = f"   (! {info['motivo']})" if info["motivo"] else ""
+                mostrar(f"  {nome:<14} {len(achados)} sósia(s)   {lista_txt}{aviso}")
             else:
                 mostrar(f"  {nome:<14} DESCARTADO: {info['motivo']}")
             saida.append(info)
@@ -556,6 +610,54 @@ def comparar(anterior, achados, varredura):
 
 
 # ---------------------------------------------------------------------------
+# 4b. O fluxo completo (linha de comando e OsintbrFLOW usam esta mesma função)
+# ---------------------------------------------------------------------------
+
+def limpar_nome(nome):
+    """'@Banco.Aurora ' -> 'banco.aurora'."""
+    return (nome or "").strip().lstrip("@").strip().lower()
+
+
+def lista_de(original, maximo=60, oficiais=()):
+    """As variantes a verificar, sem as contas oficiais da marca e sem perder o limite."""
+    fora = {limpar_nome(o) for o in oficiais}
+    return [v for v in variantes(original, maximo + len(fora)) if v["variante"] not in fora][:maximo]
+
+
+def executar(original, sites, rede=baixar, pausa=0.3, maximo=60, ler_perfis=True, oficiais=(),
+             anterior=None, mostrar=None):
+    """
+    Busca completa de uma marca. Devolve um dicionário com:
+    lista (variantes verificadas), varredura (por plataforma), achados, pivos e comparacao.
+    oficiais: usernames que pertencem à própria marca (contas reserva, regionais): nunca viram sósia.
+    """
+    mostrar = mostrar or print
+    original = limpar_nome(original)
+    oficiais = {limpar_nome(o) for o in oficiais if limpar_nome(o)} - {original}
+    lista = lista_de(original, maximo, oficiais)
+    varredura = varrer(original, lista, sites, rede, pausa, mostrar=mostrar)
+    achados = achados_de(original, lista, varredura)
+    if ler_perfis:
+        achados = analisar_perfis(original, achados, sites, varredura, rede, pausa, mostrar=mostrar)
+    comparacao = comparar(anterior, achados, varredura)
+    if comparacao:
+        mostrar(f"  Desde {data_br(comparacao['desde_utc'])}: {comparacao['novos']} novo(s), "
+                f"{len(comparacao['sumiram'])} sumiu(ram)")
+    return {"original": original, "oficiais": sorted(oficiais), "lista": lista, "varredura": varredura,
+            "achados": achados, "pivos": pivos_de(achados), "comparacao": comparacao}
+
+
+def alertas_de(achados, comparacao):
+    """
+    O que merece alerta para quem roda agendado: sósias CRÍTICO/ALTO novos desde a busca anterior
+    (ou todos os CRÍTICOS, na primeira busca da marca).
+    """
+    if comparacao is None:
+        return [a for a in achados if a["risco"] == "CRÍTICO"]
+    return [a for a in achados if a.get("novo") and a["risco"] in ("CRÍTICO", "ALTO")]
+
+
+# ---------------------------------------------------------------------------
 # 5. Saídas: JSON, CSV, lista de vigilância, manifesto e relatório HTML
 # ---------------------------------------------------------------------------
 
@@ -583,7 +685,7 @@ def sha256(caminho):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, comparacao=None):
+def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, comparacao=None, oficiais=()):
     agora = datetime.now(timezone.utc)
     pasta = os.path.join(pasta_base, f"sosia_{_seguro(original)}_{agora.strftime('%Y%m%d-%H%M%S')}")
     n = 1
@@ -596,7 +698,8 @@ def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, co
     meta = {"ferramenta": f"SÓSIA {VERSAO}", "original": original,
             "gerado_em_utc": agora.strftime("%Y-%m-%d %H:%M:%S"),
             "variantes_verificadas": len(lista), "plataformas": len(varredura),
-            "fonte_sites": fonte_sites, "modo": "verificação" if varredura else "só geração"}
+            "fonte_sites": fonte_sites, "modo": "verificação" if varredura else "só geração",
+            "oficiais": list(oficiais)}
 
     arquivos = {}
     # evidências: a página exatamente como chegou, com extensão .txt para nunca rodar script de golpista
@@ -880,6 +983,8 @@ def relatorio_html(meta, lista, varredura, achados, hashes, comparacao=None, piv
     confiaveis = [i for i in varredura if i["confiavel"]]
     descartados = [f'{i["site"]} ({i.get("motivo", "")})' for i in varredura if not i["confiavel"]]
     descartadas_txt = f" · descartadas: {html.escape('; '.join(descartados))}" if descartados else ""
+    parciais = [f'{i["site"]} ({i["motivo"]})' for i in varredura if i["confiavel"] and i.get("motivo")]
+    descartadas_txt += f" · incompletas: {html.escape('; '.join(parciais))}" if parciais else ""
     critico = sum(1 for a in achados if a["risco"] == "CRÍTICO")
     alto = sum(1 for a in achados if a["risco"] == "ALTO")
     novos = sum(1 for a in achados if a.get("novo"))
@@ -1062,74 +1167,154 @@ def rede_demo(sites, caminho=None):
 # 7. Linha de comando
 # ---------------------------------------------------------------------------
 
-def opcao(argv, nome, padrao=None):
-    return argv[argv.index(nome) + 1] if nome in argv and argv.index(nome) + 1 < len(argv) else padrao
+SAIDA_OK, SAIDA_ERRO, SAIDA_ALERTA = 0, 1, 2
+
+
+def _lista_virgulas(texto):
+    return [x.strip() for x in (texto or "").split(",") if x.strip()]
+
+
+def _maximo(texto):
+    n = int(texto)
+    if not 1 <= n <= 500:
+        raise ValueError
+    return n
+
+
+_maximo.__name__ = "número de 1 a 500"  # aparece na mensagem de erro do argparse
+
+
+def criar_parser():
+    import argparse
+
+    class Parser(argparse.ArgumentParser):
+        def error(self, message):  # código 1, para não confundir erro de uso com alerta (2)
+            self.print_usage(sys.stderr)
+            self.exit(SAIDA_ERRO, f"sosia.py: erro: {message}\n")
+
+    p = Parser(
+        prog="sosia.py", formatter_class=argparse.RawDescriptionHelpFormatter, add_help=False,
+        description=f"SÓSIA {VERSAO}: radar de perfis imitadores (variantes de um username já registradas).",
+        epilog="Exemplos:\n"
+               "  python sosia.py                         modo guiado (o mesmo dos dois cliques)\n"
+               "  python sosia.py --demo                  caso de demonstração, sem internet\n"
+               "  python sosia.py bancoaurora             busca completa\n"
+               "  python sosia.py bancoaurora --oficiais bancoaurora_sac,bancoaurora.rj\n"
+               "  python sosia.py bancoaurora --extra --plataformas Instagram,Twitter,TikTok\n"
+               "  python sosia.py bancoaurora --sem-abrir --alerta   (agendado: sai com código 2 se houver alerta)\n\n"
+               "Códigos de saída: 0 ok · 1 erro de uso · 2 alerta (só com --alerta).")
+    p._positionals.title, p._optionals.title = "argumentos", "opções"
+    p.add_argument("-h", "--help", action="help", help="mostra esta ajuda e sai")
+    p.add_argument("nome", nargs="?", help="username a proteger (com ou sem @)")
+    p.add_argument("--demo", action="store_true", help="roda o caso fictício bancoaurora, sem internet")
+    p.add_argument("--so-gerar", action="store_true", help="só gera a lista de variantes, sem acessar nada")
+    p.add_argument("--sem-perfil", action="store_true", help="não abre os perfis encontrados (sem nível CRÍTICO)")
+    p.add_argument("--max", type=_maximo, default=60, metavar="N", help="variantes a verificar, de 1 a 500 (padrão: 60)")
+    p.add_argument("--oficiais", type=_lista_virgulas, default=[], metavar="A,B",
+                   help="contas da própria marca, separadas por vírgula: nunca viram sósia")
+    p.add_argument("--plataformas", type=_lista_virgulas, default=[], metavar="A,B",
+                   help="só estas plataformas (ex.: Instagram,TikTok)")
+    p.add_argument("--extra", action="store_true", help="inclui X (Twitter), Pinterest, Reddit, Snapchat e Patreon")
+    p.add_argument("--sites", metavar="ARQUIVO", help="outra lista de sites (ex.: data.json do Sherlock)")
+    p.add_argument("--saida", metavar="PASTA", help="onde salvar (padrão: ./resultados)")
+    p.add_argument("--sem-abrir", action="store_true", help="não abre o relatório no navegador")
+    p.add_argument("--alerta", action="store_true",
+                   help="sai com código 2 se houver CRÍTICO/ALTO novo (ou CRÍTICO na 1ª busca)")
+    p.add_argument("--versao", action="version", version=VERSAO, help="mostra a versão e sai")
+    return p
+
+
+def _entrada(pergunta):
+    """input() que não quebra sem teclado (agendador, pipe vazio): devolve ""."""
+    try:
+        return input(pergunta)
+    except EOFError:
+        print()
+        return ""
+
+
+def _guiado():
+    print(f"\nSÓSIA {VERSAO} — radar de perfis imitadores\n")
+    nome = _entrada("Username da marca ou pessoa a proteger (ou DEMO para o exemplo): ").strip()
+    if nome.upper() == "DEMO":
+        return ["--demo"]
+    if not limpar_nome(nome):
+        return []
+    args = [nome]
+    oficiais = _entrada("Outras contas oficiais da marca, separadas por vírgula (Enter se não houver): ").strip()
+    if oficiais:
+        args += ["--oficiais", oficiais]
+    if _entrada("Só gerar a lista, sem acessar as plataformas? [s/N]: ").strip().lower().startswith("s"):
+        args.append("--so-gerar")
+    return args
 
 
 def main(argv):
-    if "-h" in argv or "--help" in argv:
-        print(__doc__)
-        return 0
-    if "--versao" in argv:
-        print(VERSAO)
-        return 0
-
     guiado = len(argv) == 0
-    valores = {opcao(argv, o) for o in ("--sites", "--saida", "--max")}
-    posicionais = [a for a in argv if not a.startswith("--") and a not in valores]
-    original = posicionais[0].lstrip("@") if posicionais else None
-    so_gerar = "--so-gerar" in argv
-    demo = "--demo" in argv
     if guiado:
-        print(f"\nSÓSIA {VERSAO} — radar de perfis imitadores\n")
-        original = input("Username da marca ou pessoa a proteger (ou DEMO para o exemplo): ").strip().lstrip("@")
-        if original.upper() == "DEMO":
-            demo = True
-        elif original:
-            so_gerar = input("Só gerar a lista, sem acessar as plataformas? [s/N]: ").strip().lower().startswith("s")
-    if not original and not demo:
-        print(__doc__)
-        return 1
-
-    fonte = opcao(argv, "--sites")
-    sites = carregar_sites(fonte)
-    rotulo = os.path.basename(fonte) if fonte else "sites_padrao.json (Sherlock, subconjunto)"
-    pasta_base = opcao(argv, "--saida", os.path.join(os.getcwd(), "resultados"))
-    rede, pausa, anterior_demo = baixar, 0.3, None
-    if demo:
-        original, rede, anterior_demo = rede_demo(sites)
+        argv = _guiado()
+        if not argv:
+            print("Nenhum nome digitado. Rode de novo e digite o username (ou DEMO).")
+            _entrada("\nPressione Enter para sair.")
+            return SAIDA_ERRO
+    parser = criar_parser()
+    a = parser.parse_args(argv)
+    if not a.demo and not limpar_nome(a.nome):
+        parser.print_usage()
+        print("sosia.py: falta o username a proteger (ou use --demo).")
+        return SAIDA_ERRO
+    try:
+        sites = carregar_sites(a.sites, a.extra, a.plataformas)
+    except (OSError, ValueError) as e:
+        print(f"sosia.py: {e}")
+        return SAIDA_ERRO
+    rotulo = (os.path.basename(a.sites) if a.sites else "sites_padrao.json (Sherlock, subconjunto)") + \
+        (" + sites_extra.json" if a.extra else "")
+    pasta_base = a.saida or os.path.join(os.getcwd(), "resultados")
+    rede, pausa, original, anterior = baixar, 0.3, limpar_nome(a.nome), None
+    if a.demo:
+        original, rede, anterior = rede_demo(sites)
         pausa = 0
+    elif not a.so_gerar:
+        anterior = execucao_anterior(pasta_base, original)
 
-    lista = variantes(original, int(opcao(argv, "--max", "60")))
-    print(f"\nSÓSIA :: {original} :: {len(lista)} variantes :: "
-          f"{'só geração' if so_gerar else f'{len(sites)} plataformas'}{' :: DEMONSTRAÇÃO' if demo else ''}\n")
-    varredura, achados, comparacao = [], [], None
-    if not so_gerar:
-        anterior = anterior_demo if demo else execucao_anterior(pasta_base, original)
-        varredura = varrer(original, lista, sites, rede, pausa)
-        achados = achados_de(original, lista, varredura)
-        if "--sem-perfil" not in argv:
-            achados = analisar_perfis(original, achados, sites, varredura, rede, pausa)
-        comparacao = comparar(anterior, achados, varredura)
-        if comparacao:
-            print(f"  Desde {data_br(comparacao['desde_utc'])}: {comparacao['novos']} novo(s), "
-                  f"{len(comparacao['sumiram'])} sumiu(ram)")
-    pasta, relatorio, achados = salvar(original, lista, varredura, pasta_base, rotulo, achados, comparacao)
+    alvo = "só geração" if a.so_gerar else f"{len(sites)} plataformas"
+    oficiais = sorted({limpar_nome(o) for o in a.oficiais if limpar_nome(o)} - {original})
+    lista = lista_de(original, a.max, oficiais)
+    print(f"\nSÓSIA :: {original} :: {len(lista)} variantes :: {alvo}{' :: DEMONSTRAÇÃO' if a.demo else ''}\n")
+    if a.so_gerar:
+        busca = {"lista": lista, "varredura": [], "achados": [], "comparacao": None, "oficiais": oficiais}
+    else:
+        busca = executar(original, sites, rede, pausa, a.max, not a.sem_perfil, oficiais, anterior)
+    pasta, relatorio, achados = salvar(original, busca["lista"], busca["varredura"], pasta_base, rotulo,
+                                      busca["achados"], busca["comparacao"], busca["oficiais"])
 
-    conta = {r: sum(1 for a in achados if a["risco"] == r) for r in ("CRÍTICO", "ALTO")}
+    conta = {r: sum(1 for x in achados if x["risco"] == r) for r in ("CRÍTICO", "ALTO")}
     print(f"\nSósias registrados: {len(achados)} (CRÍTICO: {conta['CRÍTICO']}, ALTO: {conta['ALTO']})")
     pivos = pivos_de(achados)
     if pivos:
         print(f"Pivôs (mesmo contato em vários sósias): {len(pivos)}")
     print(f"Relatório: {relatorio}")
-    if varredura:
+    if busca["varredura"]:
         print(f"Kit de denúncia: {os.path.join(pasta, 'denuncia.md')}")
-    if "--sem-abrir" not in argv:
+    codigo = SAIDA_OK
+    if a.alerta and busca["varredura"]:
+        alertas = alertas_de(achados, busca["comparacao"])
+        if alertas:
+            print(f"ALERTA: {len(alertas)} sósia(s) para olhar agora: "
+                  + ", ".join(f"{x['variante']} ({x['site']}, {x['risco']})" for x in alertas[:5])
+                  + (" ..." if len(alertas) > 5 else ""))
+            codigo = SAIDA_ALERTA
+    if not a.sem_abrir:
         webbrowser.open("file://" + os.path.abspath(relatorio))
     if guiado:
-        input("\nPressione Enter para sair.")
-    return 0
+        _entrada("\nPressione Enter para sair.")
+    return codigo
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except KeyboardInterrupt:
+        print("\nInterrompido. Nada da busca em andamento foi salvo.")
+        sys.exit(130)

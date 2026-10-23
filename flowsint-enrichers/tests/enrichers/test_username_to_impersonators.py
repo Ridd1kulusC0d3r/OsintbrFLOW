@@ -25,12 +25,24 @@ def test_metadados():
     assert UsernameToImpersonatorsEnricher.input_schema()["type"] == "Username"
     assert UsernameToImpersonatorsEnricher.output_schema()["type"] == "SocialAccount"
     nomes = {p["name"] for p in UsernameToImpersonatorsEnricher.get_params_schema()}
-    assert nomes == {"max_variantes", "risco_minimo", "ler_perfil", "modo"}
+    assert nomes == {
+        "max_variantes",
+        "risco_minimo",
+        "ler_perfil",
+        "oficiais",
+        "plataformas",
+        "modo",
+    }
 
 
 def test_biblioteca_igual_a_ferramenta_autonoma():
     """tools/social é cópia da ferramenta em ferramentas/sosia: não podem divergir."""
-    for nome in ("sosia.py", "sites_padrao.json", "demo/caso_demo.json"):
+    for nome in (
+        "sosia.py",
+        "sites_padrao.json",
+        "sites_extra.json",
+        "demo/caso_demo.json",
+    ):
         copia = RAIZ / "flowsint-enrichers/src/tools/social" / nome
         fonte = RAIZ / "ferramentas/sosia" / nome
         assert copia.read_bytes() == fonte.read_bytes(), (
@@ -127,3 +139,32 @@ async def test_falha_de_rede_nao_derruba_o_lote():
         saida = await enricher.scan([Username(value="marca")])
     assert saida == []
     assert log.error.called
+
+
+@pytest.mark.asyncio
+async def test_contas_oficiais_e_filtro_de_plataformas():
+    """Conta reserva da marca não vira sósia; o filtro limita as plataformas consultadas."""
+    saida, _ = await _rodar(
+        {
+            "modo": "demo",
+            "risco_minimo": "BAIXO",
+            "oficiais": "bancoaurora_oficial, @BancoAurora_BR",
+            "plataformas": "instagram,TikTok",
+        }
+    )
+    pares = {(c.username.value, c.platform) for c in saida}
+    assert ("bancoaurora_oficial", "Instagram") not in pares
+    assert ("bancoaurora_br", "TikTok") not in pares
+    assert {c.platform for c in saida} == {"Instagram", "TikTok"}
+    assert ("banc0aurora", "Instagram") in pares
+
+
+@pytest.mark.asyncio
+async def test_plataforma_desconhecida_nao_quebra():
+    with patch("flowsint_enrichers.social.to_impersonators.Logger") as log:
+        enricher = UsernameToImpersonatorsEnricher(
+            sketch_id="s", scan_id="s", params={"plataformas": "Orkut"}
+        )
+        saida = await enricher.scan([Username(value="marca")])
+    assert saida == []
+    assert "Orkut" in log.error.call_args.args[1]["message"]

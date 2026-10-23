@@ -12,7 +12,7 @@ COPIA = RAIZ / "flowsint-enrichers" / "src" / "tools" / "social"
 
 
 @pytest.mark.parametrize(
-    "nome", ["sosia.py", "sites_padrao.json", "demo/caso_demo.json"]
+    "nome", ["sosia.py", "sites_padrao.json", "sites_extra.json", "demo/caso_demo.json"]
 )
 def test_copia_do_enriquecedor_igual_a_ferramenta(nome):
     assert (COPIA / nome).read_bytes() == (KIT / nome).read_bytes(), (

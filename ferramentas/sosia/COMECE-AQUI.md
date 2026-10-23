@@ -34,6 +34,14 @@ O caso demo funciona **sem internet** (marca fictícia `bancoaurora`: 7 sósias 
 2. `denuncia.md`: o canal oficial de cada plataforma, os sinais e um texto pronto. Confirme o perfil antes de enviar.
 3. `manifesto.txt`: anexe à denúncia. Os SHA-256 provam que as evidências em `evidencias/` não mudaram.
 
+## Dicas para o uso real
+
+- **A marca tem outras contas oficiais** (SAC, regionais, reserva)? Informe essas contas quando o modo guiado perguntar, ou use `--oficiais conta1,conta2`. Assim elas nunca aparecem como sósia.
+- **Quer só algumas plataformas?** Use `--plataformas Instagram,TikTok`. Para incluir X (Twitter), Pinterest, Reddit, Snapchat e Patreon, use `--extra`.
+- **Para rodar toda semana sozinho,** use `--sem-abrir --alerta`. O SÓSIA sai com código 2 quando há sósia CRÍTICO ou ALTO novo. Exemplos de agendamento estão no `README.md` e no `MANUAL.html`.
+
+> **Novidades da 1.3:** contas oficiais, filtro de plataformas, `--extra`, espera automática quando a plataforma limita e `--alerta` para agendamento. Veja o `CHANGELOG.md`.
+
 > **Novidades da 1.2:** pivôs de contato (`contatos.csv`), evidências com SHA-256 (`evidencias/`), kit de denúncia (`denuncia.md`) e exportação STIX 2.1 (`achados.stix.json`) para OpenCTI e MISP. Veja o `CHANGELOG.md`.
 
 > **Atenção:** Nome parecido não é golpe, e CRÍTICO é indício forte, não prova. Abra cada perfil antes de concluir e use os canais oficiais de denúncia.

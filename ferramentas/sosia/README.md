@@ -1,4 +1,4 @@
-# SÓSIA 1.2 · radar de perfis imitadores
+# SÓSIA 1.3 · radar de perfis imitadores
 
 > Sherlock e Maigret procuram o nome **exato**. Golpista usa o nome **quase** exato.
 
@@ -20,7 +20,8 @@ Sem terminal: dois cliques em `Iniciar-SOSIA.bat` (Windows), `Iniciar-SOSIA.comm
 
 - Python 3.9 a 3.14, **só biblioteca padrão**: nada de `pip install`
 - Lê o `data.json` do [Sherlock](https://github.com/sherlock-project/sherlock) sem modificação (`--sites data.json`)
-- 36 testes automáticos, todos sem internet (`python -m unittest discover -s tests -v`)
+- 45 testes automáticos, todos sem internet, incluindo uma busca completa pela rede contra um servidor local (`python -m unittest discover -s tests -v`)
+- Regras das 12 plataformas idênticas ao `data.json` do Sherlock (commit `e40a45e`, 26/09/2026)
 
 | Para… | Abra |
 |---|---|
@@ -51,6 +52,30 @@ flowchart LR
 5. **Ronda.** Na próxima busca da mesma marca, mostra o que é **NOVO** e o que **SUMIU**.
 
 ![Fig 1 do guia interativo: a bancada que compara a chave original com a sósia, dente a dente](docs/img/bancada.webp)
+
+## Opções para o uso real
+
+```bash
+python sosia.py bancoaurora --oficiais bancoaurora_sac,bancoaurora.rj   # contas da própria marca não viram sósia
+python sosia.py bancoaurora --plataformas Instagram,TikTok,Telegram     # só estas
+python sosia.py bancoaurora --extra                                     # + X (Twitter), Pinterest, Reddit, Snapchat, Patreon
+python sosia.py bancoaurora --sem-abrir --alerta                        # agendado: código 2 se houver alerta
+python sosia.py --help                                                  # todas
+```
+
+| Código de saída | Quando |
+|:-:|---|
+| 0 | Busca concluída, sem alerta |
+| 1 | Erro de uso: nome vazio, plataforma desconhecida, `--max` fora de 1 a 500 |
+| 2 | Só com `--alerta`: há CRÍTICO ou ALTO **novo** desde a busca anterior (na primeira busca, qualquer CRÍTICO) |
+
+Agendamento semanal com aviso (Linux/macOS, `crontab -e`). Rode sempre com a mesma `--saida`, porque a comparação NOVO/SUMIU usa as buscas anteriores dessa pasta:
+
+```bash
+0 8 * * 1  cd ~/sosia && python3 sosia.py bancoaurora --sem-abrir --alerta --saida ~/sosia/resultados || echo "SÓSIA: verificar" | mail -s "SÓSIA alerta" voce@empresa.com
+```
+
+Se a plataforma limitar o acesso (429/503), o SÓSIA espera o que ela pedir (até 8 s) e tenta de novo uma vez. Se o limite continuar, o resultado vira **?**, nunca "livre". Depois de 5 bloqueios seguidos, ele para de insistir naquela plataforma e o relatório a mostra como "incompleta".
 
 ## O que sai de cada busca
 
@@ -113,17 +138,17 @@ flowchart LR
     C2 -- PUBLISHES_CONTACT --> P
 ```
 
-Os parâmetros são `max_variantes`, `risco_minimo`, `ler_perfil` e `modo`. Com `modo = demo`, o enriquecedor roda o caso Banco Aurora sem internet. Cada `SocialAccount` traz `sosia_risco`, `sosia_sinais`, `sosia_contatos`, `sosia_evidencia_sha256` e `sosia_coletado_em_utc`.
+Os parâmetros são `max_variantes`, `risco_minimo`, `ler_perfil`, `oficiais`, `plataformas` e `modo`. Com `modo = demo`, o enriquecedor roda o caso Banco Aurora sem internet. Cada `SocialAccount` traz `sosia_risco`, `sosia_sinais`, `sosia_contatos`, `sosia_evidencia_sha256` e `sosia_coletado_em_utc`.
 
 ## Como biblioteca
 
 ```python
 import sosia
-sites = sosia.carregar_sites()
-lista = sosia.variantes("bancoaurora", 60)
-varredura = sosia.varrer("bancoaurora", lista, sites)
-achados = sosia.analisar_perfis("bancoaurora", sosia.achados_de("bancoaurora", lista, varredura), sites, varredura)
-for p in sosia.pivos_de(achados):
+sites = sosia.carregar_sites(plataformas=["Instagram", "TikTok", "Telegram"])
+busca = sosia.executar("bancoaurora", sites, oficiais=["bancoaurora_sac"])
+for a in busca["achados"]:
+    print(a["risco"], a["variante"], a["site"], a["sinais"])
+for p in busca["pivos"]:
     print("mesma operação:", p["valor"], p["perfis"])
 
 sosia.extrair_contatos("PIX bloqueado? chama no (31) 90000-0000")   # [{'tipo': 'telefone', 'valor': '+5531900000000'}]

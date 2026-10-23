@@ -1,5 +1,21 @@
 # Changelog do SÓSIA
 
+## 1.3.0 · 2026-10-22
+
+**Pronto para uso real e para rodar agendado.**
+
+- **Um só fluxo.** `executar()` faz a busca inteira e é usado pela linha de comando e pelo enriquecedor do OsintbrFLOW. Antes, cada um montava as etapas do seu jeito.
+- **Linha de comando com `argparse`.** Ajuda em português, validação de `--max` (de 1 a 500) e erro de uso com código 1.
+- **Contas oficiais (`--oficiais a,b`).** Contas reserva e regionais da própria marca nunca viram sósia, e o limite de variantes continua cheio. O modo guiado pergunta por elas.
+- **Filtro de plataformas (`--plataformas Instagram,TikTok`)**, que avisa quando um nome não existe e lista as disponíveis.
+- **`--extra`.** Junta X (Twitter), Pinterest, Reddit, Snapchat e Patreon (`sites_extra.json`, copiado sem modificação do Sherlock).
+- **Espera quando a plataforma limita.** Em 429 ou 503, o SÓSIA respeita o `Retry-After` (até 8 s) e tenta de novo uma vez. Se o limite continuar, o resultado vira "?", nunca "livre". Depois de 5 bloqueios seguidos na mesma plataforma, o SÓSIA para de insistir nela, marca o restante como "?" e registra a plataforma como "incompleta" no relatório. Isso evita minutos de espera e não piora o bloqueio.
+- **`--alerta` para agendamento.** Sai com código 2 quando há CRÍTICO ou ALTO novo (ou CRÍTICO na primeira busca) e imprime uma linha `ALERTA:` para o agendador ou o e-mail.
+- **Robustez.** O modo guiado não quebra sem teclado (agendador, pipe) e Ctrl+C sai limpo (código 130).
+- **Regras conferidas.** As 12 plataformas são idênticas ao `data.json` do Sherlock no commit `e40a45e` (26/09/2026).
+- **OsintbrFLOW:** o enriquecedor ganhou os parâmetros `oficiais` e `plataformas`.
+- **Testes:** de 36 para 45, incluindo uma busca completa pela rede de verdade (`urllib`) contra um servidor HTTP local que imita cinco plataformas: status, mensagem, redirecionamento, soft-404 e 429 com `Retry-After`.
+
 ## 1.2.0 · 2026-10-17
 
 **Ligar, provar e denunciar.** A 1.1 dizia quem imita. A 1.2 diz quem é da mesma operação, guarda a prova e prepara a denúncia.
