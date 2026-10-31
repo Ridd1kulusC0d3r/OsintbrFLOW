@@ -1,0 +1,96 @@
+{
+  "$comment": "Subconjunto do data.json do Sherlock Project (MIT, https://github.com/sherlock-project/sherlock), copiado sem modificação. Pode ser trocado pelo data.json completo com --sites.",
+  "Instagram": {
+    "errorType": "status_code",
+    "url": "https://instagram.com/{}",
+    "urlMain": "https://instagram.com/",
+    "urlProbe": "https://imginn.com/{}",
+    "username_claimed": "instagram"
+  },
+  "TikTok": {
+    "url": "https://www.tiktok.com/@{}",
+    "urlMain": "https://www.tiktok.com",
+    "errorType": "message",
+    "errorMsg": [
+      "\"statusCode\":10221",
+      "Govt. of India decided to block 59 apps"
+    ],
+    "username_claimed": "charlidamelio"
+  },
+  "YouTube": {
+    "errorType": "status_code",
+    "url": "https://www.youtube.com/@{}",
+    "urlMain": "https://www.youtube.com/",
+    "username_claimed": "youtube"
+  },
+  "Telegram": {
+    "errorMsg": [
+      "<title>Telegram Messenger</title>",
+      "If you have <strong>Telegram</strong>, you can contact <a class=\"tgme_username_link\" href=\"tg://resolve?domain="
+    ],
+    "errorType": "message",
+    "regexCheck": "^[a-zA-Z0-9_]{3,32}[^_]$",
+    "url": "https://t.me/{}",
+    "urlMain": "https://t.me/",
+    "username_claimed": "blue"
+  },
+  "GitHub": {
+    "errorType": "status_code",
+    "regexCheck": "^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$",
+    "url": "https://www.github.com/{}",
+    "urlMain": "https://www.github.com/",
+    "username_claimed": "blue"
+  },
+  "GitLab": {
+    "errorMsg": "[]",
+    "errorType": "message",
+    "url": "https://gitlab.com/{}",
+    "urlMain": "https://gitlab.com/",
+    "urlProbe": "https://gitlab.com/api/v4/users?username={}",
+    "username_claimed": "blue"
+  },
+  "Twitch": {
+    "errorMsg": "content='Twitch is the world&#39;s leading video platform and community for gamers.'",
+    "errorType": "message",
+    "url": "https://www.twitch.tv/{}",
+    "urlMain": "https://www.twitch.tv",
+    "username_claimed": "xqc"
+  },
+  "Linktree": {
+    "errorMsg": "\"statusCode\":404",
+    "errorType": "message",
+    "regexCheck": "^[\\w\\.]{2,30}$",
+    "url": "https://linktr.ee/{}",
+    "urlMain": "https://linktr.ee/",
+    "username_claimed": "anne"
+  },
+  "Kick": {
+    "__comment__": "Cloudflare. Only viable when proxied.",
+    "errorType": "status_code",
+    "url": "https://kick.com/{}",
+    "urlMain": "https://kick.com/",
+    "urlProbe": "https://kick.com/api/v2/channels/{}",
+    "username_claimed": "blue"
+  },
+  "Bluesky": {
+    "errorType": "status_code",
+    "url": "https://bsky.app/profile/{}.bsky.social",
+    "urlProbe": "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor={}.bsky.social",
+    "urlMain": "https://bsky.app/",
+    "username_claimed": "mcuban"
+  },
+  "Medium": {
+    "errorMsg": "<body",
+    "errorType": "message",
+    "url": "https://medium.com/@{}",
+    "urlMain": "https://medium.com/",
+    "urlProbe": "https://medium.com/feed/@{}",
+    "username_claimed": "blue"
+  },
+  "Keybase": {
+    "errorType": "status_code",
+    "url": "https://keybase.io/{}",
+    "urlMain": "https://keybase.io/",
+    "username_claimed": "blue"
+  }
+}
