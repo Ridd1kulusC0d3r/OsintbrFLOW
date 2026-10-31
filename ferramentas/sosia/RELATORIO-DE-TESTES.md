@@ -1,18 +1,18 @@
 # RELATÓRIO DE TESTES — SÓSIA 1.3.0
 
-Data: 2026-10-23 01:47 UTC  
-Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v140-x86_64-with-glibc2.39`
+Data: 2026-10-31 01:09 UTC  
+Ambiente: nuvem (sandbox Linux da Anthropic) — `Linux-6.18.44-fc-v185-x86_64-with-glibc2.39`
 
 ## Matriz de versões do Python
 
 | Versão | Testes | Resultado | Tempo |
 |---|---|---|---|
-| Python 3.9.25 | 45 | **PASSOU** | 1.257 s |
-| Python 3.10.20 | 45 | **PASSOU** | 1.136 s |
-| Python 3.11.17 | 45 | **PASSOU** | 1.249 s |
-| Python 3.12.3 | 45 | **PASSOU** | 6.221 s |
-| Python 3.13.16 | 45 | **PASSOU** | 5.752 s |
-| Python 3.14.6 | 45 | **PASSOU** | 2.013 s |
+| Python 3.9.25 | 46 | **PASSOU** | 1.486 s |
+| Python 3.10.20 | 46 | **PASSOU** | 1.350 s |
+| Python 3.11.17 | 46 | **PASSOU** | 1.505 s |
+| Python 3.12.3 | 46 | **PASSOU** | 8.566 s |
+| Python 3.13.16 | 46 | **PASSOU** | 7.521 s |
+| Python 3.14.6 | 46 | **PASSOU** | 3.209 s |
 
 Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 
@@ -37,6 +37,7 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 | `test_limpar_nome` | '@Banco.Aurora' e ' banco.aurora ' viram o mesmo username | ok |
 | `test_modo_guiado_sem_teclado_nao_quebra` | Modo guiado sem teclado sai limpo; com respostas, guarda as contas oficiais e respeita 'só gerar' | ok |
 | `test_para_de_insistir_quando_a_plataforma_fecha_a_porta` | Depois de 5 bloqueios seguidos para de consultar a plataforma, marca o resto como '?' e avisa no relatório | ok |
+| `test_pasta_sem_permissao_vira_mensagem` | Pasta de saída sem permissão vira mensagem clara com código 1, sem erro técnico | ok |
 | `test_sites_extra_e_filtro` | 12 plataformas padrão, 17 com --extra, filtro sem diferenciar maiúsculas e erro claro para plataforma desconhecida | ok |
 | `test_acha_execucao_anterior_na_pasta` | Acha a última busca completa da mesma marca, ignorando 'só gerar' e outras marcas | ok |
 | `test_duas_execucoes_reais_pela_linha_de_comando` | Duas buscas seguidas pela linha de comando: pastas separadas e 0 novos na segunda | ok |
@@ -71,8 +72,8 @@ Comando: `python -I -W error::ResourceWarning -m unittest discover -s tests -v`
 `python sosia.py --demo --sem-abrir` → **PASSOU**
 
 ```
-Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261023-014744/relatorio.html
-Kit de denúncia: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261023-014744/denuncia.md
+Relatório: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261031-011016/relatorio.html
+Kit de denúncia: /tmp/claude-0/e2e_sosia/sosia_bancoaurora_20261031-011016/denuncia.md
 ```
 
 ## O que NÃO foi testado aqui (faça na sua máquina)

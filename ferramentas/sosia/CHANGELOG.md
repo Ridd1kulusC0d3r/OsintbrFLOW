@@ -12,9 +12,10 @@
 - **Espera quando a plataforma limita.** Em 429 ou 503, o SÓSIA respeita o `Retry-After` (até 8 s) e tenta de novo uma vez. Se o limite continuar, o resultado vira "?", nunca "livre". Depois de 5 bloqueios seguidos na mesma plataforma, o SÓSIA para de insistir nela, marca o restante como "?" e registra a plataforma como "incompleta" no relatório. Isso evita minutos de espera e não piora o bloqueio.
 - **`--alerta` para agendamento.** Sai com código 2 quando há CRÍTICO ou ALTO novo (ou CRÍTICO na primeira busca) e imprime uma linha `ALERTA:` para o agendador ou o e-mail.
 - **Robustez.** O modo guiado não quebra sem teclado (agendador, pipe) e Ctrl+C sai limpo (código 130).
+- **Gravação mais simples.** `salvar()` foi dividido em funções pequenas (pasta, evidências, CSVs). A saída do caso demo continua idêntica arquivo por arquivo, com 21 arquivos comparados ignorando data e hash. Pasta sem permissão de escrita vira mensagem clara com código 1, em vez de erro técnico.
 - **Regras conferidas.** As 12 plataformas são idênticas ao `data.json` do Sherlock no commit `e40a45e` (26/09/2026).
 - **OsintbrFLOW:** o enriquecedor ganhou os parâmetros `oficiais` e `plataformas`.
-- **Testes:** de 36 para 45, incluindo uma busca completa pela rede de verdade (`urllib`) contra um servidor HTTP local que imita cinco plataformas: status, mensagem, redirecionamento, soft-404 e 429 com `Retry-After`.
+- **Testes:** de 36 para 46, incluindo uma busca completa pela rede de verdade (`urllib`) contra um servidor HTTP local que imita cinco plataformas: status, mensagem, redirecionamento, soft-404 e 429 com `Retry-After`.
 
 ## 1.2.0 · 2026-10-17
 

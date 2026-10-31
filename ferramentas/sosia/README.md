@@ -20,7 +20,7 @@ Sem terminal: dois cliques em `Iniciar-SOSIA.bat` (Windows), `Iniciar-SOSIA.comm
 
 - Python 3.9 a 3.14, **só biblioteca padrão**: nada de `pip install`
 - Lê o `data.json` do [Sherlock](https://github.com/sherlock-project/sherlock) sem modificação (`--sites data.json`)
-- 45 testes automáticos, todos sem internet, incluindo uma busca completa pela rede contra um servidor local (`python -m unittest discover -s tests -v`)
+- 46 testes automáticos, todos sem internet, incluindo uma busca completa pela rede contra um servidor local (`python -m unittest discover -s tests -v`)
 - Regras das 12 plataformas idênticas ao `data.json` do Sherlock (commit `e40a45e`, 26/09/2026)
 
 | Para… | Abra |

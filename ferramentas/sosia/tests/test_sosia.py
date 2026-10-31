@@ -475,6 +475,13 @@ class TestFluxoELinhaDeComando(unittest.TestCase):
             self.rodar("x", "--max", "0")
         self.assertEqual(saida.exception.code, sosia.SAIDA_ERRO)  # erro de uso nunca é confundido com alerta
 
+    def test_pasta_sem_permissao_vira_mensagem(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch("builtins.print") as fala, \
+                mock.patch("sosia.os.makedirs", side_effect=PermissionError(13, "Permissão negada")):
+            codigo = sosia.main(["marca", "--so-gerar", "--sem-abrir", "--saida", tmp])
+        self.assertEqual(codigo, sosia.SAIDA_ERRO)
+        self.assertIn("Use --saida com outra pasta", fala.call_args.args[0])
+
     def test_modo_guiado_sem_teclado_nao_quebra(self):
         with mock.patch("builtins.input", side_effect=EOFError), mock.patch("builtins.print"):
             self.assertEqual(sosia.main([]), sosia.SAIDA_ERRO)

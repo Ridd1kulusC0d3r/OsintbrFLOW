@@ -70,6 +70,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 VERSAO = "1.3.0"
+__version__ = VERSAO
 PASTA = os.path.dirname(os.path.abspath(__file__))
 UA = f"Mozilla/5.0 (compatible; SOSIA/{VERSAO}; +brand protection)"
 
@@ -685,14 +686,76 @@ def sha256(caminho):
         return hashlib.sha256(f.read()).hexdigest()
 
 
-def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, comparacao=None, oficiais=()):
-    agora = datetime.now(timezone.utc)
+def _pasta_nova(pasta_base, original, agora):
+    """resultados/sosia_<marca>_<data>; se já existir (duas buscas no mesmo segundo), acrescenta -2, -3..."""
     pasta = os.path.join(pasta_base, f"sosia_{_seguro(original)}_{agora.strftime('%Y%m%d-%H%M%S')}")
     n = 1
     while os.path.exists(pasta + (f"-{n}" if n > 1 else "")):
         n += 1
     pasta += f"-{n}" if n > 1 else ""
     os.makedirs(pasta)
+    return pasta
+
+
+def _gravar_texto(caminho, texto, **opcoes):
+    with open(caminho, "w", encoding="utf-8", **opcoes) as f:
+        f.write(texto)
+
+
+def _gravar_csv(caminho, cabecalho, linhas):
+    """CSV com BOM (utf-8-sig): abre com acentos certos no Excel."""
+    with open(caminho, "w", newline="", encoding="utf-8-sig") as f:
+        w = csv.writer(f)
+        w.writerow(cabecalho)
+        w.writerows(linhas)
+
+
+def _gravar_evidencias(pasta, achados):
+    """
+    Grava cada página lida exatamente como chegou, em .html.txt (abre como texto: nunca roda script
+    de página de golpista). Tira o corpo do achado e anota o arquivo na prova. Devolve {nome: caminho}.
+    """
+    arquivos = {}
+    com_corpo = [a for a in achados if "_corpo" in a]
+    if com_corpo:
+        os.makedirs(os.path.join(pasta, "evidencias"))
+    for i, a in enumerate(com_corpo, 1):
+        nome = f"evidencias/{i:02d}_{_seguro(a['site'])}_{_seguro(a['variante'])}.html.txt"
+        arquivos[nome] = os.path.join(pasta, *nome.split("/"))
+        _gravar_texto(arquivos[nome], a.pop("_corpo"), newline="")  # sem converter quebras: hash = hash da coleta
+        if a.get("prova"):
+            a["prova"]["arquivo"] = nome
+    return arquivos
+
+
+def _linhas_achados(achados):
+    for a in achados:
+        yield [a["risco"], "sim" if a.get("novo") else "", a["variante"], a["site"], a["tecnica"],
+               a.get("perfil_nome", ""), " | ".join(a.get("sinais", [])), a.get("perfil_bio", ""), a["url"]]
+
+
+def _linhas_mudancas(achados, comparacao):
+    for a in achados:
+        if a.get("novo"):
+            yield ["NOVO", a["risco"], a["variante"], a["site"], a["url"]]
+    for x in comparacao["sumiram"]:
+        yield ["SUMIU", "", x["variante"], x["site"], ""]
+
+
+def _linhas_contatos(achados, pivos):
+    """Os contatos repetidos (pivôs) primeiro."""
+    repetidos = {(g["tipo"], g["valor"]): len(g["perfis"]) for g in pivos}
+    linhas = [(c, a) for a in achados for c in a.get("contatos", [])]
+    for c, a in sorted(linhas, key=lambda x: (-repetidos.get((x[0]["tipo"], x[0]["valor"]), 1),
+                                               x[0]["tipo"], x[0]["valor"])):
+        yield [TIPOS_CONTATO[c["tipo"]], c["valor"], repetidos.get((c["tipo"], c["valor"]), 1),
+               a["risco"], a["variante"], a["site"], a["url"]]
+
+
+def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, comparacao=None, oficiais=()):
+    """Grava a busca numa pasta nova. Devolve (pasta, caminho do relatorio.html, achados)."""
+    agora = datetime.now(timezone.utc)
+    pasta = _pasta_nova(pasta_base, original, agora)
     if achados is None:
         achados = achados_de(original, lista, varredura) if varredura else []
     meta = {"ferramenta": f"SÓSIA {VERSAO}", "original": original,
@@ -700,72 +763,39 @@ def salvar(original, lista, varredura, pasta_base, fonte_sites, achados=None, co
             "variantes_verificadas": len(lista), "plataformas": len(varredura),
             "fonte_sites": fonte_sites, "modo": "verificação" if varredura else "só geração",
             "oficiais": list(oficiais)}
+    em = lambda nome: os.path.join(pasta, nome)  # noqa: E731
 
-    arquivos = {}
-    # evidências: a página exatamente como chegou, com extensão .txt para nunca rodar script de golpista
-    com_corpo = [a for a in achados if "_corpo" in a]
-    if com_corpo:
-        os.makedirs(os.path.join(pasta, "evidencias"))
-    for i, a in enumerate(com_corpo, 1):
-        nome = f"evidencias/{i:02d}_{_seguro(a['site'])}_{_seguro(a['variante'])}.html.txt"
-        arquivos[nome] = os.path.join(pasta, *nome.split("/"))
-        with open(arquivos[nome], "w", encoding="utf-8", newline="") as f:
-            f.write(a.pop("_corpo"))
-        if a.get("prova"):
-            a["prova"]["arquivo"] = nome
+    arquivos = _gravar_evidencias(pasta, achados)  # antes do JSON: a prova ganha o nome do arquivo
     pivos = pivos_de(achados)
-    arquivos["variantes.txt"] = os.path.join(pasta, "variantes.txt")
-    with open(arquivos["variantes.txt"], "w", encoding="utf-8") as f:
-        f.write("\n".join(v["variante"] for v in lista) + "\n")
-    arquivos["dados.json"] = os.path.join(pasta, "dados.json")
-    with open(arquivos["dados.json"], "w", encoding="utf-8") as f:
-        json.dump({"meta": meta, "variantes": lista, "varredura": varredura, "achados": achados,
-                   "pivos": pivos, "comparacao": comparacao}, f, ensure_ascii=False, indent=2)
-    arquivos["achados.csv"] = os.path.join(pasta, "achados.csv")
-    with open(arquivos["achados.csv"], "w", newline="", encoding="utf-8-sig") as f:
-        w = csv.DictWriter(f, fieldnames=["risco", "novo", "variante", "site", "tecnica", "perfil_nome",
-                                          "sinais", "perfil_bio", "url"], extrasaction="ignore")
-        w.writeheader()
-        for a in achados:
-            w.writerow({**a, "novo": "sim" if a.get("novo") else "", "sinais": " | ".join(a.get("sinais", []))})
+    arquivos["variantes.txt"] = em("variantes.txt")
+    _gravar_texto(em("variantes.txt"), "\n".join(v["variante"] for v in lista) + "\n")
+    arquivos["dados.json"] = em("dados.json")
+    _gravar_texto(em("dados.json"), json.dumps(
+        {"meta": meta, "variantes": lista, "varredura": varredura, "achados": achados,
+         "pivos": pivos, "comparacao": comparacao}, ensure_ascii=False, indent=2))
+    arquivos["achados.csv"] = em("achados.csv")
+    _gravar_csv(em("achados.csv"), ["risco", "novo", "variante", "site", "tecnica", "perfil_nome", "sinais",
+                                    "perfil_bio", "url"], _linhas_achados(achados))
     if comparacao:
-        arquivos["mudancas.csv"] = os.path.join(pasta, "mudancas.csv")
-        with open(arquivos["mudancas.csv"], "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            w.writerow(["situacao", "risco", "variante", "site", "url"])
-            for a in achados:
-                if a.get("novo"):
-                    w.writerow(["NOVO", a["risco"], a["variante"], a["site"], a["url"]])
-            for x in comparacao["sumiram"]:
-                w.writerow(["SUMIU", "", x["variante"], x["site"], ""])
+        arquivos["mudancas.csv"] = em("mudancas.csv")
+        _gravar_csv(em("mudancas.csv"), ["situacao", "risco", "variante", "site", "url"],
+                    _linhas_mudancas(achados, comparacao))
     if any(a.get("contatos") for a in achados):
-        arquivos["contatos.csv"] = os.path.join(pasta, "contatos.csv")
-        repetidos = {(g["tipo"], g["valor"]): len(g["perfis"]) for g in pivos}
-        with open(arquivos["contatos.csv"], "w", newline="", encoding="utf-8-sig") as f:
-            w = csv.writer(f)
-            w.writerow(["tipo", "valor", "perfis_com_este_contato", "risco", "variante", "site", "url"])
-            linhas = [(c, a) for a in achados for c in a.get("contatos", [])]
-            for c, a in sorted(linhas, key=lambda x: (-repetidos.get((x[0]["tipo"], x[0]["valor"]), 1),
-                                                       x[0]["tipo"], x[0]["valor"])):
-                w.writerow([TIPOS_CONTATO[c["tipo"]], c["valor"], repetidos.get((c["tipo"], c["valor"]), 1),
-                            a["risco"], a["variante"], a["site"], a["url"]])
+        arquivos["contatos.csv"] = em("contatos.csv")
+        _gravar_csv(em("contatos.csv"), ["tipo", "valor", "perfis_com_este_contato", "risco", "variante",
+                                         "site", "url"], _linhas_contatos(achados, pivos))
     if varredura:
-        arquivos["denuncia.md"] = os.path.join(pasta, "denuncia.md")
-        with open(arquivos["denuncia.md"], "w", encoding="utf-8") as f:
-            f.write(denuncia_md(meta, achados, pivos))
-        arquivos["achados.stix.json"] = os.path.join(pasta, "achados.stix.json")
-        with open(arquivos["achados.stix.json"], "w", encoding="utf-8") as f:
-            json.dump(stix_bundle(meta, achados, pivos), f, ensure_ascii=False, indent=2)
+        arquivos["denuncia.md"] = em("denuncia.md")
+        _gravar_texto(em("denuncia.md"), denuncia_md(meta, achados, pivos))
+        arquivos["achados.stix.json"] = em("achados.stix.json")
+        _gravar_texto(em("achados.stix.json"),
+                      json.dumps(stix_bundle(meta, achados, pivos), ensure_ascii=False, indent=2))
 
-    hashes = {n: sha256(p) for n, p in arquivos.items()}
-    with open(os.path.join(pasta, "manifesto.txt"), "w", encoding="utf-8") as f:
-        f.write(f"{meta['ferramenta']} | {original} | {meta['gerado_em_utc']} UTC\n")
-        for n, h in hashes.items():
-            f.write(f"SHA-256  {h}  {n}\n")
-    relatorio = os.path.join(pasta, "relatorio.html")
-    with open(relatorio, "w", encoding="utf-8") as f:
-        f.write(relatorio_html(meta, lista, varredura, achados, hashes, comparacao, pivos))
-    return pasta, relatorio, achados
+    hashes = {n: sha256(c) for n, c in arquivos.items()}
+    _gravar_texto(em("manifesto.txt"), f"{meta['ferramenta']} | {original} | {meta['gerado_em_utc']} UTC\n"
+                  + "".join(f"SHA-256  {h}  {n}\n" for n, h in hashes.items()))
+    _gravar_texto(em("relatorio.html"), relatorio_html(meta, lista, varredura, achados, hashes, comparacao, pivos))
+    return pasta, em("relatorio.html"), achados
 
 
 # ---------------------------------------------------------------------------
@@ -1286,8 +1316,12 @@ def main(argv):
         busca = {"lista": lista, "varredura": [], "achados": [], "comparacao": None, "oficiais": oficiais}
     else:
         busca = executar(original, sites, rede, pausa, a.max, not a.sem_perfil, oficiais, anterior)
-    pasta, relatorio, achados = salvar(original, busca["lista"], busca["varredura"], pasta_base, rotulo,
-                                      busca["achados"], busca["comparacao"], busca["oficiais"])
+    try:
+        pasta, relatorio, achados = salvar(original, busca["lista"], busca["varredura"], pasta_base, rotulo,
+                                          busca["achados"], busca["comparacao"], busca["oficiais"])
+    except OSError as e:
+        print(f"sosia.py: não consegui gravar em {pasta_base}: {e.strerror or e}. Use --saida com outra pasta.")
+        return SAIDA_ERRO
 
     conta = {r: sum(1 for x in achados if x["risco"] == r) for r in ("CRÍTICO", "ALTO")}
     print(f"\nSósias registrados: {len(achados)} (CRÍTICO: {conta['CRÍTICO']}, ALTO: {conta['ALTO']})")
